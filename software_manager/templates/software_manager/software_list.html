@@ -1,0 +1,15 @@
+{% extends 'base.html' %}
+{% load buttons %}
+{% load my_form_helpers %}
+
+{% block content %}
+<div class="pull-right noprint">
+    {% add_button 'plugins:software_manager:software_add' %}
+</div>
+<h1>{% block title %}Software Repository{% endblock %}</h1>
+<div class="row">
+	<div class="col-md-12">
+        {% include 'utilities/obj_table.html' %}
+    </div>
+</div>
+{% endblock %}

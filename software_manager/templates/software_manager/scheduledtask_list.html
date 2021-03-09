@@ -1,0 +1,19 @@
+{% extends 'software_manager/my_obj_list.html' %}
+
+{% block buttons %}
+<a href="{% url 'plugins:software_manager:upgrade_device_list' %}" class="btn btn-primary">
+    <span class="glyphicon glyphicon-list" aria-hidden="true"></span> Upgrade Devices
+</a>
+{% endblock %}
+
+{% block title %}Scheduled Tasks{% endblock %}
+
+{% block bulk_buttons %}
+<button type="submit" name="_task" formaction="{% url 'plugins:software_manager:upgrade_device_scheduler' %}" class="btn btn-success btn-sm">
+    <span class="glyphicon glyphicon-plus" aria-hidden="true"></span> Re-Schedule Tasks
+</button>
+
+<button type="submit" name="_delete" formaction="{% url 'plugins:software_manager:scheduled_task_bulk_delete' %}{% if request.GET %}?{{ request.GET.urlencode }}{% endif %}" class="btn btn-danger btn-sm">
+    <span class="glyphicon glyphicon-trash" aria-hidden="true"></span> Delete Selected
+</button>
+{% endblock %}

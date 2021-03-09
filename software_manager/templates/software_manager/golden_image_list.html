@@ -1,0 +1,22 @@
+{% extends 'base.html' %}
+{% load buttons %}
+{% load my_form_helpers %}
+
+{% block content %}
+
+<div class="pull-right noprint">
+    {% block buttons %}
+    <a href="?to_excel" class="btn btn-success">
+        <span class="mdi mdi-database-export" aria-hidden="true"></span>  Export
+    </a>
+    {% endblock %}
+</div>
+
+<h1>{% block title %}Golden Images{% endblock %}</h1>
+
+<div class="row">
+    <div class="col-md-12">
+        {% include 'utilities/obj_table.html' %}
+    </div>
+</div>
+{% endblock %}

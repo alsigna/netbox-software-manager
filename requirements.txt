@@ -1,0 +1,3 @@
+scrapli[paramiko]
+rq-scheduler
+xlsxwriter

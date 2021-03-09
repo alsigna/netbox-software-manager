@@ -1,0 +1,17 @@
+{% extends 'software_manager/my_obj_list.html' %}
+
+{% block buttons %}
+<a href="{% url 'plugins:software_manager:scheduled_task_list' %}" class="btn btn-primary">
+    <span class="mdi mdi-update" aria-hidden="true"></span> Scheduled Tasks
+</a>
+
+{% endblock %}
+
+{% block title %}Upgrade Devices{% endblock %}
+
+{% block bulk_buttons %}
+<button type="submit" name="_device" formaction="{% url 'plugins:software_manager:upgrade_device_scheduler' %}" class="btn btn-success btn-sm">
+    <span class="glyphicon glyphicon-plus   " aria-hidden="true"></span> Schedule Task
+</button>
+
+{% endblock %}
