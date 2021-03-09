@@ -69,7 +69,7 @@ List of all scheduled/completed tasks.
 
 <img src="static/scheduled_task_info.png" width="75%">
 
-Detailed information about task and execute log.
+Detailed information about task and execution log.
 
 # Installation
 
@@ -172,7 +172,7 @@ cd ../../
       - ADDRESS=192.168.0.1
 ```
 
-### 4. Change NetBox __configuration.py__
+### 4. Change NetBox configuration.py
 
 ```python
 PLUGINS = [
