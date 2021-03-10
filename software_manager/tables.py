@@ -21,7 +21,7 @@ SW_LIST_SIZE = """
 SW_LIST_MD5SUM = """
 {% if record.md5sum == record.md5sum_calculated %}
     <span class="label label-success" style="font-size: initial; font-family: monospace">{{ record.md5sum }}</span>
-{% else %}    
+{% else %}
     <span class="label label-danger" style="font-size: initial; font-family: monospace">{{ record.md5sum|default:"&mdash;" }}</span>
 {% endif %}
 """
@@ -51,16 +51,16 @@ GOLDEN_IMAGE_ACTION = """
     <a href="{% url 'plugins:software_manager:golden_image_add' pid_pk=record.pk %}" class="btn btn-xs btn-warning" title="Add Image">
         <i class="glyphicon glyphicon-pencil" aria-hidden="true"></i>
     </a>
-    <button class="btn btn-danger btn-xs" title="Clear image" disabled="disabled"> 
+    <button class="btn btn-danger btn-xs" title="Clear image" disabled="disabled">
         <i class="glyphicon glyphicon-trash" aria-hidden="true"></i>
     </button>
-{% endif %}  
+{% endif %}
 """
 
 GOLDEN_IMAGE_MD5SUM = """
 {% if record.golden_image.sw.md5sum == record.golden_image.sw.md5sum_calculated %}
     <span class="label label-success" style="font-size: initial; font-family: monospace">{{ record.golden_image.sw.md5sum }}</span>
-{% else %}    
+{% else %}
     <span class="label label-danger" style="font-size: initial; font-family: monospace">{{ record.golden_image.sw.md5sum|default:"&mdash;" }}</span>
 {% endif %}
 """
@@ -151,6 +151,7 @@ SCHEDULED_TASK_JOB_ID = """
 <a href="{% url 'plugins:software_manager:scheduled_task_info' pk=record.pk %}">{{ record.job_id|cut_job_id }}</a>
 """
 
+
 class SoftwareListTable(BaseTable):
     filename = tables.TemplateColumn(
         verbose_name='Filename',
@@ -170,13 +171,14 @@ class SoftwareListTable(BaseTable):
         verbose_name='MD5 Checksum',
         template_code=SW_LIST_MD5SUM,
         orderable=False,
-    )    
+    )
     actions = tables.TemplateColumn(
         template_code=SW_LIST_ACTION,
         attrs={'td': {'class': 'text-right noprint'}},
         verbose_name='',
     )
-    class Meta(BaseTable.Meta): 
+
+    class Meta(BaseTable.Meta):
         model = SoftwareImage
         fields = ('filename', 'version', 'size', 'md5sum', 'actions')
         sequence = ('filename', 'version', 'size', 'md5sum', 'actions')
@@ -192,7 +194,7 @@ class GoldenImageListTable(BaseTable):
         verbose_name='Image File',
         template_code=GOLDEN_IMAGE_FILENAME,
         orderable=False,
-    ) 
+    )
     version = tables.Column(
         verbose_name='Version',
         accessor='golden_image.sw.version',
@@ -237,7 +239,7 @@ class UpgradeDeviceListTable(BaseTable):
     )
     tenant = tables.TemplateColumn(
         template_code=COL_TENANT
-    )  
+    )
     device_role = ColoredLabelColumn(
         verbose_name='Role'
     )
@@ -248,6 +250,7 @@ class UpgradeDeviceListTable(BaseTable):
     tags = TagColumn(
         url_name='dcim:device_list'
     )
+
     class Meta(BaseTable.Meta):
         model = Device
         fields = ('pk', 'name', 't_sw', 'c_sw', 'tenant', 'device_role', 'device_type', 'tags')
@@ -275,7 +278,7 @@ class ScheduledTaskTable(BaseTable):
         template_code=SCHEDULED_TASK_TYPE,
         attrs={
             'td': {'align': 'center'},
-            'th': {'style':'text-align: center'},
+            'th': {'style': 'text-align: center'},
         },
     )
     status = tables.TemplateColumn(
@@ -283,7 +286,7 @@ class ScheduledTaskTable(BaseTable):
         template_code=SCHEDULED_TASK_STATUS,
         attrs={
             'td': {'align': 'center'},
-            'th': {'style':'text-align: center'},
+            'th': {'style': 'text-align: center'},
         },
     )
     confirmed = tables.TemplateColumn(
@@ -292,7 +295,7 @@ class ScheduledTaskTable(BaseTable):
         orderable=True,
         attrs={
             'td': {'align': 'center'},
-            'th': {'style':'text-align: center'},
+            'th': {'style': 'text-align: center'},
         },
     )
     job_id = tables.TemplateColumn(
@@ -304,7 +307,8 @@ class ScheduledTaskTable(BaseTable):
         attrs={'td': {'class': 'text-right noprint'}},
         verbose_name='',
     )
-    class Meta(BaseTable.Meta): 
+
+    class Meta(BaseTable.Meta):
         model = ScheduledTask
         fields = ('pk', 'device', 'scheduled_time', 'start_time', 'end_time', 'task_type', 'status', 'confirmed', 'job_id', 'actions')
         sequence = ('pk', 'device', 'scheduled_time', 'start_time', 'end_time', 'task_type', 'status', 'confirmed', 'job_id', 'actions')

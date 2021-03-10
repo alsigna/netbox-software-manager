@@ -18,9 +18,12 @@ PLUGIN_SETTINGS = settings.PLUGINS_CONFIG.get('software_manager', dict())
 CF_NAME_SW_VERSION = PLUGIN_SETTINGS.get('CF_NAME_SW_VERSION', '')
 FTP_USERNAME = PLUGIN_SETTINGS.get('FTP_USERNAME', '')
 
+
 class SoftwareImage(models.Model):
     timestamp = models.DateTimeField(auto_now_add=True)
-    image = models.FileField(upload_to=f'{FTP_USERNAME}/', unique=True, validators=[FileExtensionValidator(allowed_extensions=['bin'])])
+    image = models.FileField(
+        upload_to=f'{FTP_USERNAME}/', unique=True, validators=[FileExtensionValidator(allowed_extensions=['bin'])]
+    )
     md5sum = models.CharField(max_length=36, blank=True)
     md5sum_calculated = models.CharField(max_length=36, blank=True)
     version = models.CharField(max_length=32, blank=True)
@@ -45,10 +48,10 @@ class SoftwareImage(models.Model):
                 self.md5sum_calculated = md5.hexdigest()
                 super(SoftwareImage, self).save(*args, **kwargs)
 
-    def delete(self,*args,**kwargs):
+    def delete(self, *args, **kwargs):
         if os.path.isfile(self.image.path):
             os.remove(self.image.path)
-        super(SoftwareImage, self).delete(*args,**kwargs)
+        super(SoftwareImage, self).delete(*args, **kwargs)
 
     def __str__(self):
         return self.image.name.rsplit('/', 1)[-1]
@@ -63,16 +66,16 @@ class GoldenImage(models.Model):
 
     class Meta:
         ordering = ['pid']
-    
+
     def __str__(self):
         return f'{self.pid.model}: {self.sw}'
-    
+
     def get_progress(self):
         total = self.pid.instances.count()
         if total == 0:
             return 0
         upgraded = Device.objects.filter(
-            **{f'custom_field_data__{CF_NAME_SW_VERSION}':self.sw.version},
+            **{f'custom_field_data__{CF_NAME_SW_VERSION}': self.sw.version},
             device_type=self.pid,
         ).count()
         return round(upgraded / total * 100, 2)
@@ -107,7 +110,9 @@ class ScheduledTask(models.Model):
     job_id = models.CharField(max_length=255, blank=True)
     status = models.CharField(max_length=255, choices=TaskStatusChoices, default=TaskStatusChoices.STATUS_UNKNOWN)
     message = models.CharField(max_length=511, blank=True)
-    fail_reason = models.CharField(max_length=255, choices=TaskFailReasonChoices, default=TaskFailReasonChoices.FAIL_UNKNOWN)
+    fail_reason = models.CharField(
+        max_length=255, choices=TaskFailReasonChoices, default=TaskFailReasonChoices.FAIL_UNKNOWN
+    )
     confirmed = models.BooleanField(default=False)
     scheduled_time = models.DateTimeField(blank=True)
     start_time = models.DateTimeField(null=True)
@@ -115,7 +120,7 @@ class ScheduledTask(models.Model):
     mw_duration = models.PositiveIntegerField(blank=True)
     log = models.TextField(blank=True)
     user = models.CharField(max_length=255, blank=True)
-    
+
     objects = ScheduledTaskManager()
 
     def __str__(self):
@@ -123,7 +128,7 @@ class ScheduledTask(models.Model):
             return ''
         else:
             return f'{self.device}: {self.job_id}'
-    
+
     def delete(self):
         scheduler = get_scheduler('default')
         try:
@@ -133,7 +138,7 @@ class ScheduledTask(models.Model):
                 scheduler.cancel(j)
                 return super().delete()
         except NoSuchJobError:
-            return super().delete() 
+            return super().delete()
 
     class Meta:
         ordering = ['-scheduled_time', '-start_time', '-end_time', 'job_id']

@@ -1,5 +1,3 @@
-import sys
-
 from django import forms
 from django.contrib.contenttypes.models import ContentType
 from django.utils.safestring import mark_safe
@@ -7,7 +5,7 @@ from django.conf import settings
 
 from dcim.models import DeviceType, Device, DeviceRole
 from utilities.forms import (
-    BootstrapMixin, APISelectMultiple, DynamicModelMultipleChoiceField, TagFilterField, DateTimePicker,
+    BootstrapMixin, DynamicModelMultipleChoiceField, TagFilterField, DateTimePicker,
     StaticSelect2, StaticSelect2Multiple, BOOLEAN_WITH_BLANK_CHOICES,
 )
 from extras.models import CustomField
@@ -19,6 +17,7 @@ from .models import SoftwareImage, GoldenImage, ScheduledTask
 
 PLUGIN_SETTINGS = settings.PLUGINS_CONFIG.get('software_manager', dict())
 CF_NAME_SW_VERSION = PLUGIN_SETTINGS.get('CF_NAME_SW_VERSION', '')
+
 
 class SoftwareImageAddForm(BootstrapMixin, forms.ModelForm):
     image = forms.FileField(
@@ -36,6 +35,7 @@ class SoftwareImageAddForm(BootstrapMixin, forms.ModelForm):
         label='Version',
         help_text='Verbose Software Version, ex: 15.5(3)M10',
     )
+
     class Meta:
         model = SoftwareImage
         fields = ['image', 'md5sum', 'version']
@@ -51,11 +51,13 @@ class GoldenImageAddForm(BootstrapMixin, forms.ModelForm):
         queryset=SoftwareImage.objects.all(),
         label='Device Image File',
     )
+
     class Meta:
         model = GoldenImage
         fields = [
             'device_pid', 'sw'
         ]
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields['device_pid'].widget.attrs['readonly'] = True
@@ -74,7 +76,7 @@ class ScheduledTaskCreateForm(BootstrapMixin, forms.Form):
         label='Job Type',
         initial='',
         widget=StaticSelect2()
-    )    
+    )
     scheduled_time = forms.DateTimeField(
         label='Scheduled Time',
         required=False,
@@ -153,11 +155,13 @@ class ScheduledTaskFilterForm(BootstrapMixin, forms.ModelForm):
 
     class Meta:
         model = ScheduledTask
-        fields = ['q', 'task_type', 'status', 'confirmed',
+        fields = [
+            'q', 'task_type', 'status', 'confirmed',
             'scheduled_time_after', 'scheduled_time_before',
             'start_time_after', 'start_time_before',
             'end_time_after', 'end_time_before',
         ]
+
 
 class CustomFieldVersionFilterForm(forms.Form):
     def __init__(self, *args, **kwargs):

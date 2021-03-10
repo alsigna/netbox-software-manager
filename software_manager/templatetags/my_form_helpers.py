@@ -1,11 +1,13 @@
 from django.template.defaulttags import register
 
+
 @register.inclusion_tag('software_manager/my_render_field.html')
 def my_render_field(field, start_now=False):
     return {
         'field': field,
         'start_now': start_now,
     }
+
 
 @register.inclusion_tag('utilities/templatetags/utilization_graph.html')
 def progress_graph(utilization, warning_threshold=101, danger_threshold=101):
@@ -14,6 +16,7 @@ def progress_graph(utilization, warning_threshold=101, danger_threshold=101):
         'warning_threshold': warning_threshold,
         'danger_threshold': danger_threshold,
     }
+
 
 @register.filter
 def get_current_version(device):

@@ -28,6 +28,7 @@ PLUGIN_SETTINGS = settings.PLUGINS_CONFIG.get('software_manager', dict())
 CF_NAME_SW_VERSION = PLUGIN_SETTINGS.get('CF_NAME_SW_VERSION', '')
 UPGRADE_QUEUE = PLUGIN_SETTINGS.get('UPGRADE_QUEUE', '')
 
+
 class SoftwareList(ObjectListView):
     queryset = SoftwareImage.objects.all()
     table = SoftwareListTable
@@ -89,7 +90,7 @@ class GoldenImageList(ObjectListView):
             width = [max(width[i], w[i]) for i in range(0, len(width))]
         workbook = xlsxwriter.Workbook(
             output,
-            {'remove_timezone': True, 'default_date_format': 'yyyy-mm-dd',},
+            {'remove_timezone': True, 'default_date_format': 'yyyy-mm-dd'},
         )
         worksheet = workbook.add_worksheet('SIAR')
         worksheet.add_table(
@@ -97,7 +98,7 @@ class GoldenImageList(ObjectListView):
             {'columns': header, 'data': data}
         )
         for i in range(0, len(width)):
-            worksheet.set_column(i, i , width[i])
+            worksheet.set_column(i, i, width[i])
         workbook.close()
         output.seek(0)
         return output
@@ -124,34 +125,34 @@ class GoldenImageAdd(ObjectEditView):
             pass
         else:
             i = GoldenImage(pid=DeviceType.objects.get(pk=pid_pk))
-            i.pk=True
+            i.pk = True
         form = GoldenImageAddForm(instance=i)
         return render(request, 'generic/object_edit.html', {
             'obj': i,
-            'obj_type': i._meta.verbose_name ,
+            'obj_type': i._meta.verbose_name,
             'form': form,
-            'return_url': reverse('plugins:software_manager:golden_image_list'),   
+            'return_url': reverse('plugins:software_manager:golden_image_list'),
         })
 
     def post(self, request, pk=None, pid_pk=None, *args, **kwargs):
         pid = request.POST.get('device_pid', None)
         if not pid:
-            messages.error(request, f'No PID')
+            messages.error(request, 'No PID')
             return redirect(reverse('plugins:software_manager:golden_image_list'))
-        
+
         sw = request.POST.get('sw', None)
         if not sw:
-            messages.error(request, f'No SW')
+            messages.error(request, 'No SW')
             return redirect(reverse('plugins:software_manager:golden_image_list'))
-        
+
         if not DeviceType.objects.filter(model__iexact=pid).count():
-            messages.error(request, f'Incorrect PID')
+            messages.error(request, 'Incorrect PID')
             return redirect(reverse('plugins:software_manager:golden_image_list'))
-        
+
         if not SoftwareImage.objects.filter(pk=sw).count():
-            messages.error(request, f'Incorrect SW')
+            messages.error(request, 'Incorrect SW')
             return redirect(reverse('plugins:software_manager:golden_image_list'))
-        
+
         gi = GoldenImage.objects.create(
             pid=DeviceType.objects.get(model__iexact=pid),
             sw=SoftwareImage.objects.get(pk=sw)
@@ -194,7 +195,7 @@ class UpgradeDeviceScheduler(View):
             if s.is_valid():
                 checked_fields = request.POST.getlist('_nullify')
                 data = deepcopy(s.cleaned_data)
-                if 'scheduled_time' not in checked_fields and data['scheduled_time']==None:
+                if 'scheduled_time' not in checked_fields and not data['scheduled_time']:
                     messages.error(request, 'Job start time was not set')
                     return redirect(reverse('plugins:software_manager:upgrade_device_list'))
                 for i in data['pk']:
@@ -209,7 +210,7 @@ class UpgradeDeviceScheduler(View):
                         user=request.user.username,
                     )
                     task.save()
-                    
+
                     if 'scheduled_time' in checked_fields:
                         queue = get_queue(UPGRADE_QUEUE)
                         job = queue.enqueue_job(
@@ -241,11 +242,11 @@ class UpgradeDeviceScheduler(View):
                 pk_list = [int(ScheduledTask.objects.get(pk=pk).device.pk) for pk in request.POST.getlist('pk')]
 
             selected_devices = Device.objects.filter(pk__in=pk_list)
-            
+
             if not selected_devices:
                 messages.warning(request, 'No devices were selected.')
                 return redirect(reverse('plugins:software_manager:upgrade_device_list'))
-            
+
             return render(request, 'software_manager/scheduledtask_add.html', {
                 'form': ScheduledTaskCreateForm(initial={'pk': pk_list}),
                 'parent_model_name': 'Devices',

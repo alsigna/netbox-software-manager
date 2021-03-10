@@ -4,8 +4,7 @@ from django.db.models import Q
 
 from dcim.models import Device, DeviceRole, DeviceType
 from tenancy.filters import TenancyFilterSet
-from extras.filters import CustomFieldFilterSet, CreatedUpdatedFilterSet, CustomFieldModelFilterSet
-from dcim.models import Device, DeviceRole, DeviceType
+from extras.filters import CustomFieldModelFilterSet
 from utilities.filters import BaseFilterSet, TagFilter
 
 from .models import ScheduledTask, SoftwareImage
@@ -36,7 +35,7 @@ class ScheduledTaskFilter(BaseFilterSet):
     class Meta:
         model = ScheduledTask
         fields = ['task_type', 'status', 'scheduled_time', 'start_time', 'end_time']
-    
+
     def search(self, queryset, name, value):
         if not value.strip():
             return queryset
@@ -46,7 +45,7 @@ class ScheduledTaskFilter(BaseFilterSet):
             | Q(status__icontains=value)
         )
         return queryset.filter(qs_filter)
- 
+
 
 class UpgradeDeviceFilter(
     BaseFilterSet,

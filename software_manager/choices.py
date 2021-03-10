@@ -28,6 +28,7 @@ class TaskStatusChoices(ChoiceSet):
         (STATUS_SKIPPED, 'skipped'),
     )
 
+
 class TaskFailReasonChoices(ChoiceSet):
     FAIL_UNKNOWN = 'fail-unknown'
     FAIL_CHECK = 'fail-check'

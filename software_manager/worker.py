@@ -1,18 +1,18 @@
-import time
 import pytz
 
-from datetime import datetime, timedelta
+from datetime import datetime
 from django_rq import job, get_queue
 from django.db.models import Count
 from django.conf import settings
 
 from .models import ScheduledTask
-from .choices import TaskTypeChoices, TaskStatusChoices
+from .choices import TaskStatusChoices
 from .upgrade import UpgradeDevice, UpgradeException
 
 
 PLUGIN_SETTINGS = settings.PLUGINS_CONFIG.get('software_manager', dict())
 UPGRADE_QUEUE = PLUGIN_SETTINGS.get('UPGRADE_QUEUE', '')
+
 
 @job(UPGRADE_QUEUE)
 def upgrade_device(task_id):
@@ -30,7 +30,7 @@ def upgrade_device(task_id):
         device.info(f'Summary: {overall}')
         if q.count == 0:
             if q.started_job_registry.count == 1:
-                device.info(f'All tasks have been completed.')
+                device.info('All tasks have been completed.')
             else:
                 device.info('No queued tasks were remained')
         else:
@@ -59,7 +59,7 @@ def upgrade_device(task_id):
         task.save()
         summary(task.status)
         raise
-    except Exception as e:
+    except Exception:
         task.status = TaskStatusChoices.STATUS_FAILED
         task.message = 'Unknown Error'
         task.end_time = datetime.now().replace(microsecond=0, tzinfo=pytz.utc)

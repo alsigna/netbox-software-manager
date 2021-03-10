@@ -1,4 +1,6 @@
 from extras.plugins import PluginConfig
+
+
 class software_manager(PluginConfig):
     name = 'software_manager'
     verbose_name = 'Software Manager'
@@ -10,5 +12,6 @@ class software_manager(PluginConfig):
     default_settings = {}
     base_url = 'software_manager'
     caching_config = {}
+
 
 config = software_manager

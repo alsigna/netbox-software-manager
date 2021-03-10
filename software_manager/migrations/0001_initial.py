@@ -13,7 +13,9 @@ class Migration(migrations.Migration):
             fields=[
                 ('id', models.AutoField(auto_created=True, primary_key=True, serialize=False)),
                 ('timestamp', models.DateTimeField(auto_now_add=True)),
-                ('image', models.FileField(unique=True, upload_to='software-images/', validators=[django.core.validators.FileExtensionValidator(allowed_extensions=['bin'])])),
+                ('image', models.FileField(
+                    unique=True, upload_to='software-images/', validators=[django.core.validators.FileExtensionValidator(allowed_extensions=['bin'])]
+                )),
                 ('md5sum', models.CharField(blank=True, max_length=36)),
                 ('md5sum_calculated', models.CharField(blank=True, max_length=36)),
                 ('version', models.CharField(blank=True, max_length=32)),

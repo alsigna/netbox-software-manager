@@ -4,12 +4,13 @@ import time
 import pytz
 import os
 
-from django_rq import job, get_queue
+from django_rq import get_queue
+# from django_rq import job, get_queue
 from django.conf import settings
 from datetime import timedelta
-from random import randint
+# from random import randint
 from scrapli.driver.core import IOSXEDriver
-from scrapli.exceptions import *
+from scrapli.exceptions import ScrapliAuthenticationFailed, ScrapliConnectionError, ScrapliTimeout
 from datetime import datetime
 
 from .logger import log
@@ -31,24 +32,25 @@ FTP_PASSWORD = PLUGIN_SETTINGS.get('FTP_PASSWORD', '')
 FTP_SERVER = PLUGIN_SETTINGS.get('FTP_SERVER', '')
 TIME_ZONE = os.environ.get('TIME_ZONE', 'UTC')
 
+
 class UpgradeDevice:
     def __init__(self, task):
         self.task = task
         self.log_id = f'{task.job_id} - {task.device.name}'
         self.device = {
-            'auth_username':DEVICE_USERNAME,
-            'auth_password':DEVICE_PASSWORD,
-            'auth_strict_key':False,
+            'auth_username': DEVICE_USERNAME,
+            'auth_password': DEVICE_PASSWORD,
+            'auth_strict_key': False,
             # 'ssh_config_file':'/var/lib/unit/.ssh/config',
             # 'ssh_config_file':'/root/.ssh/config',
-            'port':22,
-            'timeout_socket':5,
+            'port': 22,
+            'timeout_socket': 5,
             'transport': 'paramiko',
         }
         if task.device.primary_ip:
             self.device['host'] = str(task.device.primary_ip.address.ip)
         else:
-            msg = f'No primary (mgmt) address'
+            msg = 'No primary (mgmt) address'
             self.warning(msg)
             self.skip_task(msg, TaskFailReasonChoices.FAIL_CHECK)
 
@@ -56,7 +58,7 @@ class UpgradeDevice:
         log.debug(f'{self.log_id} - {msg}')
         self.task.log += f'{datetime.now(pytz.timezone(TIME_ZONE)).strftime("%Y-%m-%d %H:%M:%S")} - DEBUG - {msg}\n'
         self.task.save()
-        
+
     def info(self, msg):
         log.info(f'{self.log_id} - {msg}')
         self.task.log += f'{datetime.now(pytz.timezone(TIME_ZONE)).strftime("%Y-%m-%d %H:%M:%S")} - INFO - {msg}\n'
@@ -101,21 +103,14 @@ class UpgradeDevice:
             self.warning(msg)
             self.skip_task(msg, TaskFailReasonChoices.FAIL_CHECK)
         else:
-            self.debug(f'MW is still active')
-
-        # if self.task.device.custom_field_data.get(CF_NAME_SW_VERSION, '').upper() == self.task.device.device_type.golden_image.sw.version.upper():
-        #     msg = f'Current version {self.task.device.custom_field_data[CF_NAME_SW_VERSION]} matches with the target SW'
-        #     self.warning(msg)
-        #     self.skip_task(msg, TaskFailReasonChoices.FAIL_CHECK)
-        # else:
-        #     self.debug(f'Current version {self.task.device.custom_field_data[CF_NAME_SW_VERSION]} did not match with {self.task.device.device_type.golden_image.sw.version.upper()}. Upgrade is required')
+            self.debug('MW is still active')
 
         if self.task.task_type == TaskTypeChoices.TYPE_UPGRADE:
             q = get_queue(UPGRADE_QUEUE)
             active_jobs = q.started_job_registry.count
             non_ack = ScheduledTask.objects.filter(start_time__isnull=False, confirmed=False).count()
             if non_ack >= active_jobs + UPGRADE_THRESHOLD:
-                msg = f'Reached failure threshold: Unconfirmed: {non_ack}, active: {active_jobs}, failed: {non_ack - active_jobs}, threshold: {UPGRADE_THRESHOLD}'
+                msg = f'Reached failure threshold: Unconfirmed: {non_ack}, active: {active_jobs}, failed: {non_ack-active_jobs}, threshold: {UPGRADE_THRESHOLD}'
                 self.warning(msg)
                 self.skip_task(msg, TaskFailReasonChoices.FAIL_CHECK)
             else:
@@ -131,7 +126,7 @@ class UpgradeDevice:
                 pass
             cli = False
             if self.device['port'] != 23:
-                self.debug(f'Swiching to telnet')
+                self.debug('Swiching to telnet')
                 self.device['port'] = 23
                 self.device['transport'] = 'telnet'
                 cli = self.connect_cli(**kwargs)
@@ -159,23 +154,23 @@ class UpgradeDevice:
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                 s.settimeout(self.device.get('timeout_socket', 5))
-                s.connect((self.device['host'],22))
+                s.connect((self.device['host'], 22))
         except Exception:
             self.debug('no response on TCP/22')
             try:
                 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                     s.settimeout(self.device.get('timeout_socket', 5))
-                    s.connect((self.device['host'],23))
+                    s.connect((self.device['host'], 23))
             except Exception:
                 self.debug('no response on TCP/23')
                 time.sleep(2)
                 return False
             else:
                 self.debug('got response on TCP/23')
-        else:           
+        else:
             self.debug('got response on TCP/22')
         time.sleep(2)
-        return True    
+        return True
 
     def check_device(self):
         pid = ''
@@ -187,7 +182,7 @@ class UpgradeDevice:
 
         cli = self.connect_cli()
         if not cli:
-            msg = f'Can not connect to device CLI'
+            msg = 'Can not connect to device CLI'
             self.error(msg)
             self.skip_task(msg, TaskFailReasonChoices.FAIL_CONNECT)
 
@@ -195,15 +190,15 @@ class UpgradeDevice:
         cli.close()
 
         if output.failed:
-            msg = f'Can not collect outputs from device'
+            msg = 'Can not collect outputs from device'
             self.error(msg)
             self.skip_task(msg, TaskFailReasonChoices.FAIL_CONFIG)
-        
+
         self.debug('----------vv Outputs vv----------')
         self.debug(output.result)
         self.debug('----------^^ Outputs ^^----------')
 
-        r = re.search(r'\n\w+\s+(\S+)\s+.*\(revision\s+',output[0].result)
+        r = re.search(r'\n\w+\s+(\S+)\s+.*\(revision\s+', output[0].result)
         if r:
             pid = r.group(1)
             # pid = re.sub('\+','plus',r.group(1))
@@ -213,7 +208,7 @@ class UpgradeDevice:
             self.error(msg)
             self.skip_task(msg, reason=TaskFailReasonChoices.FAIL_CONFIG)
 
-        r = re.search(r'\n.*\s+board\s+ID\s+(\S+)',output[0].result)
+        r = re.search(r'\n.*\s+board\s+ID\s+(\S+)', output[0].result)
         if r:
             sn = r.group(1)
             self.info(f'SN: {sn}')
@@ -221,7 +216,7 @@ class UpgradeDevice:
             msg = 'Can not get device SN'
             self.error(msg)
             self.skip_task(msg, reason=TaskFailReasonChoices.FAIL_CONFIG)
-        
+
         if pid.upper() != self.task.device.device_type.model.upper() or sn.lower() != self.task.device.serial.lower():
             msg = 'Device PID/SN does not match with NetBox data'
             self.error(msg)
@@ -232,8 +227,8 @@ class UpgradeDevice:
         self.file_system = self.files[0]['file_system'].strip('/')
         self.target_image = self.task.device.device_type.golden_image.sw.filename
         self.target_path = self.task.device.device_type.golden_image.sw.image.path
-        self.image_on_device = list(filter (lambda x: x['name'] == self.target_image, self.files))
-        
+        self.image_on_device = list(filter(lambda x: x['name'] == self.target_image, self.files))
+
         self.debug(f'File system: {self.file_system}')
         self.debug(f'Target Image: {self.target_image}')
         self.debug(f'Target Path: {self.target_path}')
@@ -262,7 +257,10 @@ class UpgradeDevice:
 
         if not len(self.image_on_device):
             self.info('No image on the device. Need to transfer')
-            self.debug(f'Free on {self.file_system} {self.files[0]["total_free"]}, Image size (+10%) {int(int(self.task.device.device_type.golden_image.sw.image.size)*1.1)}')
+            self.debug(
+                f'Free on {self.file_system} {self.files[0]["total_free"]}, \
+                Image size (+10%) {int(int(self.task.device.device_type.golden_image.sw.image.size)*1.1)}'
+            )
             if int(self.files[0]['total_free']) < int(int(self.task.device.device_type.golden_image.sw.image.size)*1.1):
                 try:
                     cli.close()
@@ -279,7 +277,7 @@ class UpgradeDevice:
                     cli.close()
                 except Exception:
                     pass
-                msg = f'Can not change configuration'
+                msg = 'Can not change configuration'
                 self.error(msg)
                 self.skip_task(msg, TaskFailReasonChoices.FAIL_UPLOAD)
             self.debug(f'Copy command: {cmd_copy_ftp}')
@@ -290,7 +288,7 @@ class UpgradeDevice:
                     cli.close()
                 except Exception:
                     pass
-                msg = f'Can not download image from FTP'
+                msg = 'Can not download image from FTP'
                 self.error(msg)
                 self.skip_task(msg, TaskFailReasonChoices.FAIL_UPLOAD)
 
@@ -301,12 +299,12 @@ class UpgradeDevice:
                     cli.close()
                 except Exception:
                     pass
-                msg = f'Can not do rollback configuration'
+                msg = 'Can not do rollback configuration'
                 self.error(msg)
                 self.skip_task(msg, TaskFailReasonChoices.FAIL_UPLOAD)
         else:
             self.info(f'Image {self.target_image} already exists')
-        self.info(f'MD5 verification ...')
+        self.info('MD5 verification ...')
 
         md5 = cli.send_command(f'verify /md5 {self.file_system}/{self.target_image} {self.task.device.device_type.golden_image.sw.md5sum}')
         self.debug(f'MD5 verication result:\n{md5.result[-200:]}')
@@ -319,7 +317,7 @@ class UpgradeDevice:
             self.error(msg)
             self.skip_task(msg, TaskFailReasonChoices.FAIL_CHECK)
         if re.search(r'Verified', md5.result):
-            self.info(f'MD5 was verified')
+            self.info('MD5 was verified')
         else:
             try:
                 cli.close()
@@ -364,19 +362,19 @@ class UpgradeDevice:
         if sw_current.upper() == sw_target.upper():
             msg = f'Current version {sw_current} matches with target {sw_target}'
             self.warning(msg)
-            self.info(f'Update custom field')
+            self.info('Update custom field')
             self.task.device.custom_field_data[CF_NAME_SW_VERSION] = sw_current
             self.task.device.save()
-            self.skip_task(msg, TaskFailReasonChoices.FAIL_UPGRADE)   
+            self.skip_task(msg, TaskFailReasonChoices.FAIL_UPGRADE)
 
         if not len(self.image_on_device):
             msg = 'No target image on the box'
             self.error(msg)
             self.skip_task(msg, TaskFailReasonChoices.FAIL_UPGRADE)
-        self.info(f'Image exists on the box')
+        self.info('Image exists on the box')
 
         cli.timeout_ops = 600
-        self.info(f'MD5 verification ...')
+        self.info('MD5 verification ...')
         md5 = cli.send_command(f'verify /md5 {self.file_system}/{self.target_image} {self.task.device.device_type.golden_image.sw.md5sum}')
         self.debug(f'MD5 verication result:\n{md5.result[-200:]}')
         if md5.failed:
@@ -388,7 +386,7 @@ class UpgradeDevice:
             self.error(msg)
             self.skip_task(msg, TaskFailReasonChoices.FAIL_CHECK)
         if re.search(r'Verified', md5.result):
-            self.info(f'MD5 was verified')
+            self.info('MD5 was verified')
         else:
             try:
                 cli.close()
@@ -399,7 +397,7 @@ class UpgradeDevice:
             self.skip_task(msg, TaskFailReasonChoices.FAIL_CHECK)
         cli.timeout_ops = 10
 
-        self.info(f'Preparing boot system config')
+        self.info('Preparing boot system config')
         new_boot_lines = []
         old_boot_lines = output[0].result.splitlines()
         self.debug(f'Orginal boot lines:\n{old_boot_lines}')
@@ -426,7 +424,7 @@ class UpgradeDevice:
             time.sleep(2)
             cli.open()
             try:
-                output_tmp = cli.send_interactive ([
+                output_tmp = cli.send_interactive([
                     ('write', '[confirm]', False),
                     ('\n', '#', False),
                 ])
@@ -437,7 +435,7 @@ class UpgradeDevice:
             else:
                 output = output_tmp
         if re.search(r'\[OK\]', output.result):
-            self.info(f'Config was saved')
+            self.info('Config was saved')
         else:
             msg = 'Can not save config'
             self.error(msg)
@@ -489,7 +487,7 @@ class UpgradeDevice:
             time.sleep(2)
             cli.open()
             try:
-                output_tmp = cli.send_interactive ([
+                output_tmp = cli.send_interactive([
                     ('write', '[confirm]', False),
                     ('\n', '#', False),
                 ])
@@ -500,17 +498,17 @@ class UpgradeDevice:
             else:
                 output = output_tmp
         if re.search(r'\[OK\]', output.result):
-            self.info(f'Config was saved')
+            self.info('Config was saved')
         else:
             msg = 'Can not save config'
             self.error(msg)
             self.drop_task(msg, TaskFailReasonChoices.FAIL_UPGRADE)
         cli.close()
 
-        self.info(f'Update custom field')
+        self.info('Update custom field')
         self.task.device.custom_field_data[CF_NAME_SW_VERSION] = parsed[0].get('version', 'N/A')
         self.task.device.save()
-        self.info(f'Post-checks have been done')
+        self.info('Post-checks have been done')
         return True
 
     def execute_task(self):
@@ -544,18 +542,18 @@ class UpgradeDevice:
             for try_number in range(1, UPGRADE_MAX_ATTEMPTS_AFTER_RELOAD + 1):
                 self.info(f'Connecting after reload {try_number}/{UPGRADE_MAX_ATTEMPTS_AFTER_RELOAD}...')
                 if self.is_alive():
-                    self.info(f'Device became online')
+                    self.info('Device became online')
                     time.sleep(10)
                     break
                 else:
                     self.info(f'Device is not online, next try in {UPGRADE_SECONDS_BETWEEN_ATTEMPTS} seconds')
                 time.sleep(UPGRADE_SECONDS_BETWEEN_ATTEMPTS)
             if not self.is_alive():
-                msg = f'Device was lost after reload'
+                msg = 'Device was lost after reload'
                 self.error(msg)
                 self.drop_task(msg, TaskFailReasonChoices.FAIL_UPGRADE)
             else:
-                self.info(f'Checks after reload')
+                self.info('Checks after reload')
                 self.post_check()
 
         return True

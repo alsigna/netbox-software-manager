@@ -6,7 +6,7 @@ urlpatterns = [
     path('software/add',             views.SoftwareAdd.as_view(),    name='software_add'),
     path('software/<int:pk>/edit',   views.SoftwareAdd.as_view(),    name='software_edit'),
     path('software/<int:pk>/delete', views.SoftwareDelele.as_view(), name='software_delete'),
- 
+
     path('golden_image/',                 views.GoldenImageList.as_view(),   name='golden_image_list'),
     path('golden_image/<int:pid_pk>/add', views.GoldenImageAdd.as_view(),    name='golden_image_add'),
     path('golden_image/<int:pk>/edit',    views.GoldenImageEdit.as_view(),   name='golden_image_edit'),
