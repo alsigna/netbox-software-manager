@@ -79,7 +79,7 @@ Instruction below describes installation for Docker-compose instance of NetBox.
 
 ```shell
 cd {{ your-netbox-locaton }}
-git clone https://github.com/a1ex1gn4/netbox-software-manager.git
+git clone https://github.com/alsigna/netbox-software-manager.git
 cd netbox-software-manager
 docker build -t netbox-plugin .
 ```
