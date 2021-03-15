@@ -13,5 +13,5 @@ setup(
     ],
     packages=find_packages(),
     include_package_data=True,
-    url='https://github.com/a1ex1gn4/netbox-software-manager',
+    url='https://github.com/alsigna/netbox-software-manager',
 )
