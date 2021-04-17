@@ -1,17 +1,22 @@
 from setuptools import find_packages, setup
 
+with open("README.md", "r") as f:
+    long_description = f.read()
+
 setup(
-    name='software_manager',
-    version='0.1',
-    description='Software Manager for Cisco IOS/IOS-XE devices',
-    author='Alexander Ignatov',
-    license='MIT',
+    name="netbox-plugin-software-manager",
+    version="0.0.2",
+    description="Software Manager for Cisco IOS/IOS-XE devices",
+    long_description=long_description,
+    long_description_content_type="text/markdown",
+    author="Alexander Ignatov",
+    license="MIT",
     install_requires=[
-        'scrapli[paramiko]',
-        'rq-scheduler',
-        'xlsxwriter',
+        "scrapli[paramiko]",
+        "rq-scheduler",
+        "xlsxwriter",
     ],
     packages=find_packages(),
     include_package_data=True,
-    url='https://github.com/alsigna/netbox-software-manager',
+    url="https://github.com/alsigna/netbox-software-manager",
 )
