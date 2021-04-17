@@ -75,7 +75,12 @@ Detailed information about task and execution log.
 
 Instruction below describes installation for Docker-compose instance of NetBox.
 
-### 1. Create new docker image based on latest-ldap netbox image
+For bare-metal setup pip can be used for installation. But some changes (ftp/redis etc) will be requared anyway.
+```shell
+pip install netbox-plugin-software-manager
+```
+
+## 1. Create new docker image based on latest-ldap netbox image
 
 ```shell
 cd {{ your-netbox-locaton }}
@@ -112,7 +117,7 @@ docker build -t netbox-plugin .
 > #--Pip
 > RUN /opt/netbox/venv/bin/python -m pip install /source/SoftwareManager/
 
-### 2. Create FTP docker image based on [docker-alpine-ftp-server](https://github.com/delfer/docker-alpine-ftp-server)
+## 2. Create FTP docker image based on [docker-alpine-ftp-server](https://github.com/delfer/docker-alpine-ftp-server)
 
 >Why FTP? Originally scp was used to transfer files, but based on experience, FTP is much faster.
 
@@ -121,7 +126,7 @@ cd ftp
 docker build -t ftp_for_netbox .
 cd ../../
 ```
-### 3. Change docker-compose.yml
+## 3. Change docker-compose.yml
 
 ```dockerfile
 ...
@@ -172,7 +177,7 @@ cd ../../
       - ADDRESS=192.168.0.1
 ```
 
-### 4. Change NetBox configuration.py
+## 4. Change NetBox configuration.py
 
 ```python
 PLUGINS = [
@@ -206,19 +211,19 @@ PLUGINS_CONFIG = {
 }
 ```
 
-### 6. Rester docker-compose
+## 6. Restart docker-compose
 
-### 7. Add Custom Field
+## 7. Add Custom Field
 
 | Name          |  Type  | Label         | Object(s)       |
 |---------------|--------|---------------|-----------------|
 | sw_version    |  Text  | SW Version    | dcim > device   |
 
-### 8. Try to use
+## 8. Try to use
 
 - - -
 
-### nginx-unit.json
+## nginx-unit.json
 
 Original NetBox config is used with max_body_size:
 ```json
@@ -229,7 +234,7 @@ Original NetBox config is used with max_body_size:
 }
 ```
 
-### rq.sh script
+## rq.sh script
 ```shell
 #!/bin/bash
 
