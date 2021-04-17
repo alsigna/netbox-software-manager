@@ -5,7 +5,7 @@ with open("README.md", "r") as f:
 
 setup(
     name="netbox-plugin-software-manager",
-    version="0.0.2",
+    version="0.0.3",
     description="Software Manager for Cisco IOS/IOS-XE devices",
     long_description=long_description,
     long_description_content_type="text/markdown",
