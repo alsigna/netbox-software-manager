@@ -244,9 +244,9 @@ class UpgradeDevice:
 
     def file_upload(self):
         if self.task.transfer_method == TaskTransferMethod.METHOD_FTP:
-            cmd_copy_ftp = f"copy ftp://{FTP_USERNAME}:{FTP_PASSWORD}@{FTP_SERVER}/{self.target_image} {self.file_system}/{self.target_image}"
+            cmd_copy = f"copy ftp://{FTP_USERNAME}:{FTP_PASSWORD}@{FTP_SERVER}/{self.target_image} {self.file_system}/{self.target_image}"
         elif self.task.transfer_method == TaskTransferMethod.METHOD_HTTP:
-            cmd_copy_ftp = f"copy {HTTP_SERVER}/{self.target_image} {self.file_system}/{self.target_image}"
+            cmd_copy = f"copy {HTTP_SERVER}{self.target_image} {self.file_system}/{self.target_image}"
         else:
             msg = "Unknown transfer method"
             self.error(msg)
@@ -297,15 +297,15 @@ class UpgradeDevice:
                 msg = "Can not change configuration"
                 self.error(msg)
                 self.skip_task(msg, TaskFailReasonChoices.FAIL_UPLOAD)
-            self.debug(f"Copy command: {cmd_copy_ftp}")
-            output = cli.send_command(cmd_copy_ftp)
+            self.debug(f"Copy command: {cmd_copy}")
+            output = cli.send_command(cmd_copy)
             self.debug(f"Copying process:\n{output.result}")
-            if output.failed or not re.search(r"OK", output.result):
+            if output.failed or not (re.search(r"OK", output.result) or re.search(r"bytes copied in", output.result)):
                 try:
                     cli.close()
                 except Exception:
                     pass
-                msg = "Can not download image from FTP"
+                msg = "Can not download image from server"
                 self.error(msg)
                 self.skip_task(msg, TaskFailReasonChoices.FAIL_UPLOAD)
 
