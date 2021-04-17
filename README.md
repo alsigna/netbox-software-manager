@@ -121,9 +121,17 @@ docker build -t netbox-plugin .
 
 >Why FTP? Originally scp was used to transfer files, but based on experience, FTP is much faster.
 
+>HTTP was added in 0.0.3, But FTP_USERNAME in configuration still required as it used as folder name for IOS upload
+
 ```shell
 cd ftp
 docker build -t ftp_for_netbox .
+cd ../../
+```
+or
+```shell
+cd http
+docker build -t http_for_netbox .
 cd ../../
 ```
 ## 3. Change docker-compose.yml
@@ -175,6 +183,16 @@ cd ../../
       - USERS=software-images|ftp_password
       # Your external (host) IP address, not contaner's IP
       - ADDRESS=192.168.0.1
+  
+  # simple http server
+  http:
+    image: http_for_netbox
+    ports:
+      - "80:80"
+    volumes:
+      # Mount folder with IOS images. FTP has RO only.
+      - ./netbox-software-manager/software-images:/usr/share/nginx/html:z,ro
+
 ```
 
 ## 4. Change NetBox configuration.py
@@ -193,7 +211,11 @@ PLUGINS_CONFIG = {
         'FTP_USERNAME': 'software-images',
         'FTP_PASSWORD': 'ftp_password',
         'FTP_SERVER': '192.168.0.1',
-        
+        # HTTP server name with patch to images
+        "HTTP_SERVER": "http://192.168.0./",
+        # Default transport method, can be also changed while scheduling task, [tfp|http]
+        "DEFAULT_TRANSFER_METHOD": "ftp",
+
         # Log file
         'UPGRADE_LOG_FILE': '/var/log/upgrade.log',
         # Queue name. Check step 1. Should be the same

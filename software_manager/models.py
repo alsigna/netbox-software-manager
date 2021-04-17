@@ -12,17 +12,17 @@ from rq.exceptions import NoSuchJobError
 from dcim.models import Device
 from utilities.querysets import RestrictedQuerySet
 
-from .choices import TaskTypeChoices, TaskStatusChoices, TaskFailReasonChoices
+from .choices import TaskTypeChoices, TaskStatusChoices, TaskFailReasonChoices, TaskTransferMethod
 
-PLUGIN_SETTINGS = settings.PLUGINS_CONFIG.get('software_manager', dict())
-CF_NAME_SW_VERSION = PLUGIN_SETTINGS.get('CF_NAME_SW_VERSION', '')
-FTP_USERNAME = PLUGIN_SETTINGS.get('FTP_USERNAME', '')
+PLUGIN_SETTINGS = settings.PLUGINS_CONFIG.get("software_manager", dict())
+CF_NAME_SW_VERSION = PLUGIN_SETTINGS.get("CF_NAME_SW_VERSION", "")
+FTP_USERNAME = PLUGIN_SETTINGS.get("FTP_USERNAME", "")
 
 
 class SoftwareImage(models.Model):
     timestamp = models.DateTimeField(auto_now_add=True)
     image = models.FileField(
-        upload_to=f'{FTP_USERNAME}/', unique=True, validators=[FileExtensionValidator(allowed_extensions=['bin'])]
+        upload_to=f"{FTP_USERNAME}/", unique=True, validators=[FileExtensionValidator(allowed_extensions=["bin"])]
     )
     md5sum = models.CharField(max_length=36, blank=True)
     md5sum_calculated = models.CharField(max_length=36, blank=True)
@@ -32,10 +32,10 @@ class SoftwareImage(models.Model):
     objects = RestrictedQuerySet.as_manager()
 
     class Meta:
-        ordering = ['-filename']
+        ordering = ["-filename"]
 
     def save(self, *args, **kwargs):
-        self.filename = self.image.name.rsplit('/', 1)[-1]
+        self.filename = self.image.name.rsplit("/", 1)[-1]
         if self.pk:
             super(SoftwareImage, self).save(*args, **kwargs)
         else:
@@ -54,28 +54,28 @@ class SoftwareImage(models.Model):
         super(SoftwareImage, self).delete(*args, **kwargs)
 
     def __str__(self):
-        return self.image.name.rsplit('/', 1)[-1]
+        return self.image.name.rsplit("/", 1)[-1]
 
 
 class GoldenImage(models.Model):
     timestamp = models.DateTimeField(auto_now_add=True)
-    pid = models.OneToOneField(to='dcim.DeviceType', on_delete=models.CASCADE, related_name='golden_image')
-    sw = models.ForeignKey(to='SoftwareImage', on_delete=models.CASCADE, blank=True, null=True)
+    pid = models.OneToOneField(to="dcim.DeviceType", on_delete=models.CASCADE, related_name="golden_image")
+    sw = models.ForeignKey(to="SoftwareImage", on_delete=models.CASCADE, blank=True, null=True)
 
     objects = RestrictedQuerySet.as_manager()
 
     class Meta:
-        ordering = ['pid']
+        ordering = ["pid"]
 
     def __str__(self):
-        return f'{self.pid.model}: {self.sw}'
+        return f"{self.pid.model}: {self.sw}"
 
     def get_progress(self):
         total = self.pid.instances.count()
         if total == 0:
             return 0
         upgraded = Device.objects.filter(
-            **{f'custom_field_data__{CF_NAME_SW_VERSION}': self.sw.version},
+            **{f"custom_field_data__{CF_NAME_SW_VERSION}": self.sw.version},
             device_type=self.pid,
         ).count()
         return round(upgraded / total * 100, 2)
@@ -84,7 +84,7 @@ class GoldenImage(models.Model):
 class ScheduledTaskQuerySet(RestrictedQuerySet):
     def delete(self):
         exclude_list = []
-        scheduler = get_scheduler('default')
+        scheduler = get_scheduler("default")
         for i in self:
             try:
                 j = Job.fetch(i.job_id, scheduler.connection)
@@ -105,7 +105,7 @@ class ScheduledTaskManager(models.Manager):
 
 class ScheduledTask(models.Model):
     timestamp = models.DateTimeField(auto_now_add=True)
-    device = models.ForeignKey(to='dcim.Device', on_delete=models.SET_NULL, blank=True, null=True)
+    device = models.ForeignKey(to="dcim.Device", on_delete=models.SET_NULL, blank=True, null=True)
     task_type = models.CharField(max_length=255, choices=TaskTypeChoices, default=TaskTypeChoices.TYPE_UPLOAD)
     job_id = models.CharField(max_length=255, blank=True)
     status = models.CharField(max_length=255, choices=TaskStatusChoices, default=TaskStatusChoices.STATUS_UNKNOWN)
@@ -120,17 +120,18 @@ class ScheduledTask(models.Model):
     mw_duration = models.PositiveIntegerField(blank=True)
     log = models.TextField(blank=True)
     user = models.CharField(max_length=255, blank=True)
+    transfer_method = models.CharField(max_length=8, choices=TaskTransferMethod, default=TaskTransferMethod.METHOD_FTP)
 
     objects = ScheduledTaskManager()
 
     def __str__(self):
         if not self.device:
-            return ''
+            return ""
         else:
-            return f'{self.device}: {self.job_id}'
+            return f"{self.device}: {self.job_id}"
 
     def delete(self):
-        scheduler = get_scheduler('default')
+        scheduler = get_scheduler("default")
         try:
             j = Job.fetch(self.job_id, scheduler.connection)
             if not j.is_started:
@@ -141,4 +142,4 @@ class ScheduledTask(models.Model):
             return super().delete()
 
     class Meta:
-        ordering = ['-scheduled_time', '-start_time', '-end_time', 'job_id']
+        ordering = ["-scheduled_time", "-start_time", "-end_time", "job_id"]
