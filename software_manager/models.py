@@ -29,6 +29,13 @@ class SoftwareImage(NetBoxModel):
         null=True,
         blank=True,
     )
+
+    supported_devices = models.OneToManyField(
+        to=DeviceType,
+        on_delete=models.CASCADE,
+        related_name="software_images",
+    )
+        
     md5sum = models.CharField(
         max_length=36,
         blank=True,
