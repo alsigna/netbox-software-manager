@@ -1,192 +1,157 @@
-import xlsxwriter
-import io
-import os
-import pytz
-
 from copy import deepcopy
 from datetime import datetime
-from django_rq import get_scheduler, get_queue
-from django.shortcuts import render, redirect, get_object_or_404
-from django.contrib import messages
-from django.views.generic import View
-from django.urls import reverse
-from django.http import HttpResponse
+
+import pytz
+from dcim.models import Device, DeviceType
 from django.conf import settings
+from django.contrib import messages
+from django.core.handlers.wsgi import WSGIRequest
+from django.http import HttpResponse, HttpResponseRedirect
+from django.shortcuts import redirect, render
+from django.urls import reverse
+from django.views import View
+from django_rq import get_queue
+from netbox.views.generic import BulkDeleteView, ObjectDeleteView, ObjectEditView, ObjectListView, ObjectView
 
-from netbox.views.generic import ObjectListView, ObjectEditView, ObjectDeleteView, BulkDeleteView
-from dcim.models import DeviceType, Device
-
-from .models import SoftwareImage, GoldenImage, ScheduledTask
-from .tables import SoftwareListTable, GoldenImageListTable, UpgradeDeviceListTable, ScheduledTaskTable
-from .filters import UpgradeDeviceFilter, ScheduledTaskFilter
+from .choices import TaskStatusChoices
+from .filtersets import GoldenImageFilterSet, ScheduledTaskFilterSet, SoftwareImageFilterSet
 from .forms import (
-    UpgradeDeviceFilterForm,
+    GoldenImageAddForm,
+    GoldenImageFilterForm,
     ScheduledTaskCreateForm,
     ScheduledTaskFilterForm,
-    SoftwareImageAddForm,
-    GoldenImageAddForm,
+    SoftwareImageEditForm,
+    SoftwareImageFilterForm,
 )
-from .choices import TaskStatusChoices
+from .models import GoldenImage, ScheduledTask, SoftwareImage
+from .tables import (
+    GoldenImageListTable,
+    ScheduledTaskBulkDeleteTable,
+    ScheduledTaskTable,
+    ScheduleTasksTable,
+    SoftwareImageListTable,
+    UpgradeDeviceListTable,
+)
 
-
-TIME_ZONE = os.environ.get("TIME_ZONE", "UTC")
 PLUGIN_SETTINGS = settings.PLUGINS_CONFIG.get("software_manager", dict())
 CF_NAME_SW_VERSION = PLUGIN_SETTINGS.get("CF_NAME_SW_VERSION", "")
 UPGRADE_QUEUE = PLUGIN_SETTINGS.get("UPGRADE_QUEUE", "")
 
+########################################################################
+#                          SoftwareImage
+########################################################################
 
-class SoftwareList(ObjectListView):
+
+class SoftwareImageView(ObjectView):
     queryset = SoftwareImage.objects.all()
-    table = SoftwareListTable
-    template_name = "software_manager/software_list.html"
 
 
-class SoftwareAdd(ObjectEditView):
+class SoftwareImageList(ObjectListView):
     queryset = SoftwareImage.objects.all()
-    model_form = SoftwareImageAddForm
-    default_return_url = "plugins:software_manager:software_list"
+    table = SoftwareImageListTable
+    filterset = SoftwareImageFilterSet
+    filterset_form = SoftwareImageFilterForm
+    actions = ("add", "bulk_delete")
 
 
-class SoftwareDelele(ObjectDeleteView):
+class SoftwareImageAdd(ObjectEditView):
     queryset = SoftwareImage.objects.all()
-    default_return_url = "plugins:software_manager:software_list"
+    form = SoftwareImageEditForm
+
+    def get_return_url(self, *args, **kwargs) -> str:
+        return reverse("plugins:software_manager:softwareimage_list")
+
+
+class SoftwareImageEdit(ObjectEditView):
+    queryset = SoftwareImage.objects.all()
+    form = SoftwareImageEditForm
+
+
+class SoftwareImageDelete(ObjectDeleteView):
+    queryset = SoftwareImage.objects.all()
+
+    def get_return_url(self, *args, **kwargs) -> str:
+        return reverse("plugins:software_manager:softwareimage_list")
+
+
+class SoftwareImageBulkDelete(BulkDeleteView):
+    queryset = SoftwareImage.objects.all()
+    table = SoftwareImageListTable
+
+
+########################################################################
+#                          GoldenImage
+########################################################################
 
 
 class GoldenImageList(ObjectListView):
     queryset = DeviceType.objects.all()
     table = GoldenImageListTable
-    template_name = "software_manager/golden_image_list.html"
-
-    def export_to_excel(self):
-        data = []
-        output = io.BytesIO()
-        header = [
-            {"header": "Hostname"},
-            {"header": "PID"},
-            {"header": "IP Address"},
-            {"header": "Hub"},
-            {"header": "SW"},
-            {"header": "Golden Image"},
-        ]
-        width = [len(i["header"]) + 2 for i in header]
-        devices = (
-            Device.objects.all()
-            .prefetch_related(
-                "primary_ip4",
-                "tenant",
-                "device_type",
-                "device_type__golden_image",
-            )
-            .order_by("name")
-        )
-        for d in devices:
-            if d.name:
-                hostname = d.name
-            else:
-                hostname = "unnamed device"
-            k = [
-                hostname,
-                d.device_type.model,
-                str(d.primary_ip4).split("/")[0],
-                str(d.tenant),
-                d.custom_field_data[CF_NAME_SW_VERSION],
-            ]
-            if hasattr(d.device_type, "golden_image"):
-                k.append(
-                    str(
-                        str(d.custom_field_data[CF_NAME_SW_VERSION]).upper()
-                        == str(d.device_type.golden_image.sw.version).upper()
-                    )
-                )
-            else:
-                k.append("False")
-            data.append(k)
-            w = [len(i) for i in k]
-            width = [max(width[i], w[i]) for i in range(0, len(width))]
-        workbook = xlsxwriter.Workbook(
-            output,
-            {"remove_timezone": True, "default_date_format": "yyyy-mm-dd"},
-        )
-        worksheet = workbook.add_worksheet("SIAR")
-        worksheet.add_table(0, 0, Device.objects.all().count(), len(header) - 1, {"columns": header, "data": data})
-        for i in range(0, len(width)):
-            worksheet.set_column(i, i, width[i])
-        workbook.close()
-        output.seek(0)
-        return output
-
-    def get(self, request, *args, **kwargs):
-        if "to_excel" in request.GET.keys():
-            filename = f'siar_{datetime.now().astimezone(pytz.timezone(TIME_ZONE)).strftime("%Y%m%d_%H%M%S")}.xlsx'
-            response = HttpResponse(
-                self.export_to_excel(),
-                content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            )
-            response["Content-Disposition"] = f'attachment; filename="{filename}"'
-            return response
-        return super().get(request, *args, **kwargs)
+    filterset = GoldenImageFilterSet
+    filterset_form = GoldenImageFilterForm
+    actions = ()
 
 
 class GoldenImageAdd(ObjectEditView):
     queryset = GoldenImage.objects.all()
-    model_form = GoldenImageAddForm
-    default_return_url = "plugins:software_manager:golden_image_list"
+    form = GoldenImageAddForm
+    default_return_url = "plugins:software_manager:goldenimage_list"
 
-    def get(self, request, pk=None, pid_pk=None, *args, **kwargs):
-        if pk is not None:
-            pass
-        else:
-            i = GoldenImage(pid=DeviceType.objects.get(pk=pid_pk))
-            i.pk = True
-        form = GoldenImageAddForm(instance=i)
+    def get(self, request, pid_pk: int, *args, **kwargs):
+        instance = GoldenImage(pid=DeviceType.objects.get(pk=pid_pk))
+        form = GoldenImageAddForm(instance=instance)
         return render(
             request,
             "generic/object_edit.html",
             {
-                "obj": i,
-                "obj_type": i._meta.verbose_name,
+                "object": instance,
                 "form": form,
-                "return_url": reverse("plugins:software_manager:golden_image_list"),
+                "return_url": reverse("plugins:software_manager:goldenimage_list"),
             },
         )
 
-    def post(self, request, pk=None, pid_pk=None, *args, **kwargs):
+    def post(self, request, *args, **kwargs):
         pid = request.POST.get("device_pid", None)
         if not pid:
             messages.error(request, "No PID")
-            return redirect(reverse("plugins:software_manager:golden_image_list"))
+            return redirect(reverse("plugins:software_manager:goldenimage_list"))
 
         sw = request.POST.get("sw", None)
         if not sw:
             messages.error(request, "No SW")
-            return redirect(reverse("plugins:software_manager:golden_image_list"))
+            return redirect(reverse("plugins:software_manager:goldenimage_list"))
 
-        if not DeviceType.objects.filter(model__iexact=pid).count():
+        if not DeviceType.objects.filter(model__iexact=pid).exists():
             messages.error(request, "Incorrect PID")
-            return redirect(reverse("plugins:software_manager:golden_image_list"))
+            return redirect(reverse("plugins:software_manager:goldenimage_list"))
 
-        if not SoftwareImage.objects.filter(pk=sw).count():
+        if not SoftwareImage.objects.filter(pk=sw).exists():
             messages.error(request, "Incorrect SW")
-            return redirect(reverse("plugins:software_manager:golden_image_list"))
+            return redirect(reverse("plugins:software_manager:goldenimage_list"))
 
         gi = GoldenImage.objects.create(
             pid=DeviceType.objects.get(model__iexact=pid), sw=SoftwareImage.objects.get(pk=sw)
         )
         gi.save()
 
-        messages.success(request, f"Assigned golden image {pid}: {gi.sw}")
-        return redirect(reverse("plugins:software_manager:golden_image_list"))
+        messages.success(request, f"Assigned Golden Image for {pid}: {gi.sw}")
+        return redirect(reverse("plugins:software_manager:goldenimage_list"))
 
 
 class GoldenImageEdit(ObjectEditView):
     queryset = GoldenImage.objects.all()
-    model_form = GoldenImageAddForm
-    default_return_url = "plugins:software_manager:golden_image_list"
+    form = GoldenImageAddForm
+    default_return_url = "plugins:software_manager:goldenimage_list"
 
 
 class GoldenImageDelete(ObjectDeleteView):
     queryset = GoldenImage.objects.all()
-    default_return_url = "plugins:software_manager:golden_image_list"
+    default_return_url = "plugins:software_manager:goldenimage_list"
+
+
+########################################################################
+#                          UpgradeDevice
+########################################################################
 
 
 class UpgradeDeviceList(ObjectListView):
@@ -200,99 +165,124 @@ class UpgradeDeviceList(ObjectListView):
         )
         .order_by("name")
     )
-    filterset = UpgradeDeviceFilter
-    filterset_form = UpgradeDeviceFilterForm
+    actions = ()
     table = UpgradeDeviceListTable
-    template_name = "software_manager/upgrade_device_list.html"
+    template_name = "software_manager/upgradedevice_list.html"
+
+
+def submit_tasks(request: WSGIRequest) -> HttpResponseRedirect:
+    filled_form = ScheduledTaskCreateForm(request.POST)
+    if not filled_form.is_valid():
+        messages.error(request, "Error form is not valid")
+        return redirect(
+            to=reverse("plugins:software_manager:upgradedevice_list"),
+            permanent=False,
+        )
+
+    checked_fields = request.POST.getlist("_nullify")
+    data = deepcopy(filled_form.cleaned_data)
+
+    if "scheduled_time" not in checked_fields and not data["scheduled_time"]:
+        messages.error(request, "Job start-time was not set")
+        return redirect(
+            to=reverse("plugins:software_manager:upgradedevice_list"),
+            permanent=False,
+        )
+
+    if "scheduled_time" in checked_fields:
+        start_now = datetime.now().replace(microsecond=0).astimezone(pytz.timezone(settings.TIME_ZONE))
+    else:
+        start_now = None
+
+    for device in data["pk"]:
+        if start_now is not None:
+            data["scheduled_time"] = start_now
+
+        task = ScheduledTask(
+            device=device,
+            task_type=data["task_type"],
+            scheduled_time=data["scheduled_time"],
+            mw_duration=int(data["mw_duration"]),
+            status=TaskStatusChoices.STATUS_SCHEDULED,
+            user=request.user.username,  # type: ignore
+            transfer_method=data["transfer_method"],
+        )
+        task.save()
+
+        queue = get_queue(UPGRADE_QUEUE)
+        queue_args = {
+            "f": "software_manager.worker.upgrade_device",
+            "job_timeout": 3600,
+            "args": [task.pk],
+        }
+        if start_now is not None:
+            job = queue.enqueue(**queue_args)
+        else:
+            job = queue.enqueue_at(
+                datetime=data["scheduled_time"],
+                **queue_args,
+            )
+
+        task.job_id = job.id
+        task.save()
+
+    return redirect(
+        to=reverse("plugins:software_manager:scheduledtask_list"),
+        permanent=False,
+    )
 
 
 class UpgradeDeviceScheduler(View):
-    def post(self, request):
+    def post(self, request: WSGIRequest) -> HttpResponse | HttpResponseRedirect:
         if "_create" in request.POST:
-            s = ScheduledTaskCreateForm(request.POST)
-            if s.is_valid():
-                checked_fields = request.POST.getlist("_nullify")
-                data = deepcopy(s.cleaned_data)
-                if "scheduled_time" not in checked_fields and not data["scheduled_time"]:
-                    messages.error(request, "Job start time was not set")
-                    return redirect(reverse("plugins:software_manager:upgrade_device_list"))
-                for i in data["pk"]:
-                    if "scheduled_time" in checked_fields:
-                        data["scheduled_time"] = (
-                            datetime.now().replace(microsecond=0).astimezone(pytz.timezone(TIME_ZONE))
-                        )
-                    task = ScheduledTask(
-                        device=i,
-                        task_type=data["task_type"],
-                        scheduled_time=data["scheduled_time"],
-                        mw_duration=int(data["mw_duration"]),
-                        status=TaskStatusChoices.STATUS_SCHEDULED,
-                        user=request.user.username,
-                        transfer_method=data["transfer_method"],
-                    )
-                    task.save()
-
-                    if "scheduled_time" in checked_fields:
-                        queue = get_queue(UPGRADE_QUEUE)
-                        job = queue.enqueue_job(
-                            queue.create_job(
-                                func="software_manager.worker.upgrade_device",
-                                args=[task.pk],
-                                timeout=9000,
-                            )
-                        )
-                    else:
-                        scheduler = get_scheduler(UPGRADE_QUEUE)
-                        job = scheduler.schedule(
-                            scheduled_time=data["scheduled_time"],
-                            func="software_manager.worker.upgrade_device",
-                            args=[task.pk],
-                            timeout=9000,
-                        )
-                    task.job_id = job.id
-                    task.save()
-                messages.success(request, f'Task {data["task_type"]} was scheduled for {len(data["pk"])} devices')
-            else:
-                messages.error(request, "Error form is not valid")
-                return redirect(reverse("plugins:software_manager:upgrade_device_list"))
-            return redirect(reverse("plugins:software_manager:scheduled_task_list"))
+            return submit_tasks(request=request)
         else:
-            if "_device" in request.POST:
-                pk_list = [int(pk) for pk in request.POST.getlist("pk")]
-            elif "_task" in request.POST:
-                pk_list = [int(ScheduledTask.objects.get(pk=pk).device.pk) for pk in request.POST.getlist("pk")]
+            if "_devices" in request.POST:
+                device_list = [int(pk) for pk in request.POST.getlist("pk")]
+            elif "_tasks" in request.POST:
+                device_list = [int(ScheduledTask.objects.get(pk=pk).device.pk) for pk in request.POST.getlist("pk")]
+            else:
+                device_list = []
 
-            selected_devices = Device.objects.filter(pk__in=pk_list)
+            selected_devices = Device.objects.filter(pk__in=device_list)
 
             if not selected_devices:
-                messages.warning(request, "No devices were selected.")
-                return redirect(reverse("plugins:software_manager:upgrade_device_list"))
+                if "_tasks" in request.POST:
+                    messages.warning(request, "No Scheduled Tasks were selected for re-scheduling.")
+                    return redirect(reverse("plugins:software_manager:scheduledtask_list"))
+                else:
+                    messages.warning(request, "No devices were selected.")
+                    return redirect(reverse("plugins:software_manager:upgradedevice_list"))
 
             return render(
-                request,
-                "software_manager/scheduledtask_add.html",
-                {
-                    "form": ScheduledTaskCreateForm(initial={"pk": pk_list}),
-                    "parent_model_name": "Devices",
-                    "model_name": "Scheduled Tasks",
-                    "table": UpgradeDeviceListTable(selected_devices),
-                    "return_url": reverse("plugins:software_manager:upgrade_device_list"),
-                    "next_url": reverse("plugins:software_manager:scheduled_task_list"),
+                request=request,
+                template_name="software_manager/scheduledtask_add.html",
+                context={
+                    "form": ScheduledTaskCreateForm(initial={"pk": device_list}),
+                    "table": ScheduleTasksTable(selected_devices),
+                    "return_url": reverse("plugins:software_manager:upgradedevice_list"),
+                    "next_url": reverse("plugins:software_manager:scheduledtask_list"),
                 },
             )
+
+
+########################################################################
+#                          ScheduledTask
+########################################################################
 
 
 class ScheduledTaskList(ObjectListView):
     queryset = ScheduledTask.objects.all()
     table = ScheduledTaskTable
-    filterset = ScheduledTaskFilter
+    filterset = ScheduledTaskFilterSet
     filterset_form = ScheduledTaskFilterForm
+    actions = ()
     template_name = "software_manager/scheduledtask_list.html"
 
     def post(self, request, *args, **kwargs):
         if "_confirm" in request.POST:
-            pk = request.POST.get("_confirm", "")
-            if pk:
+            pk = request.POST.get("_confirm", None)
+            if pk is not None:
                 task = ScheduledTask.objects.get(pk=int(pk))
                 task.confirmed = not task.confirmed
                 task.save()
@@ -302,26 +292,16 @@ class ScheduledTaskList(ObjectListView):
         return redirect(request.get_full_path())
 
 
-class ScheduledTaskBulkDelete(BulkDeleteView):
+class ScheduledTaskInfo(ObjectView):
     queryset = ScheduledTask.objects.all()
-    table = ScheduledTaskTable
-    default_return_url = "plugins:software_manager:scheduled_task_list"
 
 
 class ScheduledTaskDelete(ObjectDeleteView):
     queryset = ScheduledTask.objects.all()
-    default_return_url = "plugins:software_manager:scheduled_task_list"
+    default_return_url = "plugins:software_manager:scheduledtask_list"
 
 
-class ScheduledTaskInfo(ObjectDeleteView):
+class ScheduledTaskBulkDelete(BulkDeleteView):
     queryset = ScheduledTask.objects.all()
-
-    def get(self, request, pk):
-        task = get_object_or_404(self.queryset, pk=pk)
-        return render(
-            request,
-            "software_manager/scheduledtask_info.html",
-            {
-                "task": task,
-            },
-        )
+    table = ScheduledTaskBulkDeleteTable
+    default_return_url = "plugins:software_manager:scheduledtask_list"

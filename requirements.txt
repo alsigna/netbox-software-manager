@@ -1,3 +1,2 @@
 scrapli[paramiko]
-rq-scheduler
-xlsxwriter
+scrapli[textfsm]

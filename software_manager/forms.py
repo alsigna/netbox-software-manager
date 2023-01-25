@@ -1,38 +1,44 @@
+from pathlib import Path
+
+from dcim.models import Device, DeviceType, Manufacturer
 from django import forms
-from django.contrib.contenttypes.models import ContentType
-from django.utils.safestring import mark_safe
 from django.conf import settings
-
-from dcim.models import DeviceType, Device, DeviceRole
+from netbox.forms import NetBoxModelFilterSetForm, NetBoxModelForm
 from utilities.forms import (
-    BootstrapMixin,
-    DynamicModelMultipleChoiceField,
-    TagFilterField,
-    DateTimePicker,
-    StaticSelect2,
-    StaticSelect2Multiple,
     BOOLEAN_WITH_BLANK_CHOICES,
+    BootstrapMixin,
+    CommentField,
+    DateTimePicker,
+    DynamicModelMultipleChoiceField,
+    MultipleChoiceField,
+    StaticSelect,
+    TagFilterField,
 )
-from extras.models import CustomField
-from tenancy.models import Tenant
 
-from .choices import TaskTransferMethod, TaskTypeChoices, TaskStatusChoices
-from .models import SoftwareImage, GoldenImage, ScheduledTask
-
+from .choices import TaskStatusChoices, TaskTransferMethod, TaskTypeChoices
+from .models import GoldenImage, ScheduledTask, SoftwareImage
 
 PLUGIN_SETTINGS = settings.PLUGINS_CONFIG.get("software_manager", dict())
 CF_NAME_SW_VERSION = PLUGIN_SETTINGS.get("CF_NAME_SW_VERSION", "")
 DEFAULT_TRANSFER_METHOD = PLUGIN_SETTINGS.get("DEFAULT_TRANSFER_METHOD", TaskTransferMethod.METHOD_FTP)
+IMAGE_FOLDER = PLUGIN_SETTINGS.get("IMAGE_FOLDER", "")
+
+IMAGE_FORMATS = ".bin"
 
 
-class SoftwareImageAddForm(BootstrapMixin, forms.ModelForm):
+class ClearableFileInput(forms.ClearableFileInput):
+    template_name = "software_manager/widgets/clearable_file_input.html"
+
+
+class SoftwareImageEditForm(NetBoxModelForm):
     image = forms.FileField(
-        required=True,
-        label="IOS",
-        help_text="IOS Image File",
+        required=False,
+        label="Image",
+        help_text="Image File, with .bin extension",
+        widget=ClearableFileInput(attrs={"accept": IMAGE_FORMATS}),
     )
     md5sum = forms.CharField(
-        required=True,
+        required=False,
         label="MD5 Checksum",
         help_text="Expected MD5 Checksum, ex: 0f58a02f3d3f1e1be8f509d2e5b58fb8",
     )
@@ -41,10 +47,121 @@ class SoftwareImageAddForm(BootstrapMixin, forms.ModelForm):
         label="Version",
         help_text="Verbose Software Version, ex: 15.5(3)M10",
     )
+    comments = CommentField(
+        label="Comments",
+    )
 
     class Meta:
         model = SoftwareImage
-        fields = ["image", "md5sum", "version"]
+        fields = [
+            "image",
+            "md5sum",
+            "version",
+            "tags",
+            "comments",
+        ]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # Once uploaded, image cannot be changed. Otherwise a lot of logical issues can be appeared.
+        if self.instance.image_exists:
+            self.fields["image"].widget.attrs["disabled"] = True
+            self.fields["image"].initial = self.instance.image
+
+    def clean(self):
+        cleaned_data = super().clean()
+        print(f"{cleaned_data=}")
+        print(f"{self.instance=}")
+        print(f"{self.instance.pk=}")
+        image = cleaned_data.get("image", None)
+        version = cleaned_data.get("version", None)
+        if not version:
+            raise forms.ValidationError(
+                {"version": f"Version is requared"},
+            )
+
+        # if trying to upload image, but this filename already exists in DB
+        if image and SoftwareImage.objects.filter(filename__iexact=image.name).exists():
+            raise forms.ValidationError(
+                {"image": f"Record '{image.name}' already exists. Contact with NetBox admins."},
+            )
+
+        # if trying to upload image, but this file already exists on a disk
+        if image and Path(settings.MEDIA_ROOT, IMAGE_FOLDER, image.name).is_file():
+            raise forms.ValidationError(
+                {"image": f"File '{image.name}' already exists. Contact with NetBox admins."},
+            )
+
+        # if file not specified, version need to unique
+        if (
+            not image
+            and SoftwareImage.objects.filter(version__iexact=version, image__exact="")
+            .exclude(pk=self.instance.pk)
+            .exists()
+        ):
+            raise forms.ValidationError(
+                {"version": f"Version '{version}' without image already exists."},
+            )
+
+
+class SoftwareImageFilterForm(NetBoxModelFilterSetForm):
+    filename = forms.CharField(
+        required=False,
+    )
+    md5sum = forms.CharField(
+        required=False,
+        label="MD5",
+    )
+    version = forms.CharField(
+        required=False,
+        label="SW Version",
+    )
+
+    model = SoftwareImage
+    tag = TagFilterField(SoftwareImage)
+    fieldsets = (
+        (None, ("q", "tag")),
+        ("Exact Match", ("md5sum", "version")),
+    )
+
+    class Meta:
+        model = SoftwareImage
+        fields = (
+            "filename",
+            "md5sum",
+            "version",
+        )
+
+
+class GoldenImageFilterForm(NetBoxModelFilterSetForm):
+    manufacturer_id = DynamicModelMultipleChoiceField(
+        queryset=Manufacturer.objects.all(),
+        required=False,
+        label="Manufacturer",
+    )
+    id = DynamicModelMultipleChoiceField(
+        queryset=DeviceType.objects.all(),
+        required=False,
+        label="PID (Model)",
+        query_params={"manufacturer_id": "$manufacturer_id"},
+    )
+    # TODO
+    # software_image = DynamicModelMultipleChoiceField(
+    #     queryset=SoftwareImage.objects.all(),
+    #     required=False,
+    #     label="Software Image",
+    # )
+
+    model = DeviceType
+    fieldsets = ((None, ("q", "manufacturer_id", "id")),)
+
+    class Meta:
+        model = DeviceType
+        fields = (
+            "manufacturer_id",
+            "id",
+        )
 
 
 class GoldenImageAddForm(BootstrapMixin, forms.ModelForm):
@@ -55,7 +172,7 @@ class GoldenImageAddForm(BootstrapMixin, forms.ModelForm):
     sw = forms.ModelChoiceField(
         required=True,
         queryset=SoftwareImage.objects.all(),
-        label="Device Image File",
+        label="Image/Version",
     )
 
     class Meta:
@@ -70,9 +187,16 @@ class GoldenImageAddForm(BootstrapMixin, forms.ModelForm):
 
 class ScheduledTaskCreateForm(BootstrapMixin, forms.Form):
     model = ScheduledTask
-    pk = forms.ModelMultipleChoiceField(queryset=Device.objects.all(), widget=forms.MultipleHiddenInput())
+    pk = forms.ModelMultipleChoiceField(
+        queryset=Device.objects.all(),
+        widget=forms.MultipleHiddenInput(),
+    )
     task_type = forms.ChoiceField(
-        choices=TaskTypeChoices, required=True, label="Job Type", initial="", widget=StaticSelect2()
+        choices=TaskTypeChoices,
+        required=True,
+        label="Job Type",
+        initial="",
+        widget=StaticSelect(),
     )
     scheduled_time = forms.DateTimeField(
         label="Scheduled Time",
@@ -92,7 +216,7 @@ class ScheduledTaskCreateForm(BootstrapMixin, forms.Form):
         required=True,
         label="Transfer Method",
         initial=DEFAULT_TRANSFER_METHOD,
-        widget=StaticSelect2(),
+        widget=StaticSelect(),
     )
 
     class Meta:
@@ -104,35 +228,63 @@ class ScheduledTaskCreateForm(BootstrapMixin, forms.Form):
         self.fields["mw_duration"].widget.attrs["min"] = 1
 
 
-class ScheduledTaskFilterForm(BootstrapMixin, forms.ModelForm):
-    model = ScheduledTask
-    q = forms.CharField(required=False, label="Search")
-    task_type = forms.MultipleChoiceField(
-        label="Type", choices=TaskTypeChoices, required=False, widget=StaticSelect2Multiple()
+class ScheduledTaskFilterForm(NetBoxModelFilterSetForm):
+    status = MultipleChoiceField(
+        choices=TaskStatusChoices,
+        required=False,
     )
-    status = forms.MultipleChoiceField(
-        label="Status", choices=TaskStatusChoices, required=False, widget=StaticSelect2Multiple()
+    task_type = MultipleChoiceField(
+        choices=TaskTypeChoices,
+        required=False,
     )
     confirmed = forms.NullBooleanField(
-        required=False, label="Is Confirmed (ACK)", widget=StaticSelect2(choices=BOOLEAN_WITH_BLANK_CHOICES)
+        required=False,
+        label="Is Confirmed (ACK)",
+        widget=StaticSelect(choices=BOOLEAN_WITH_BLANK_CHOICES),
     )
     scheduled_time_after = forms.DateTimeField(
-        label=mark_safe("<br/>Scheduled After"), required=False, widget=DateTimePicker()
+        label="After",
+        required=False,
+        widget=DateTimePicker(),
     )
-    scheduled_time_before = forms.DateTimeField(label="Scheduled Before", required=False, widget=DateTimePicker())
+    scheduled_time_before = forms.DateTimeField(
+        label="Before",
+        required=False,
+        widget=DateTimePicker(),
+    )
     start_time_after = forms.DateTimeField(
-        label=mark_safe("<br/>Started After"), required=False, widget=DateTimePicker()
+        label="After",
+        required=False,
+        widget=DateTimePicker(),
     )
-    start_time_before = forms.DateTimeField(label="Started Before", required=False, widget=DateTimePicker())
-    end_time_after = forms.DateTimeField(label=mark_safe("<br/>Ended After"), required=False, widget=DateTimePicker())
-    end_time_before = forms.DateTimeField(label="Ended Before", required=False, widget=DateTimePicker())
+    start_time_before = forms.DateTimeField(
+        label="Before",
+        required=False,
+        widget=DateTimePicker(),
+    )
+    end_time_after = forms.DateTimeField(
+        label="After",
+        required=False,
+        widget=DateTimePicker(),
+    )
+    end_time_before = forms.DateTimeField(
+        label="Before",
+        required=False,
+        widget=DateTimePicker(),
+    )
+    model = ScheduledTask
+    fieldsets = (
+        (None, ("q", "status", "task_type", "confirmed")),
+        ("Scheduled Time", ("scheduled_time_after", "scheduled_time_before")),
+        ("Start Time", ("start_time_after", "start_time_before")),
+        ("End Time", ("end_time_after", "end_time_before")),
+    )
 
     class Meta:
         model = ScheduledTask
-        fields = [
-            "q",
-            "task_type",
+        fields = (
             "status",
+            "task_type",
             "confirmed",
             "scheduled_time_after",
             "scheduled_time_before",
@@ -140,41 +292,4 @@ class ScheduledTaskFilterForm(BootstrapMixin, forms.ModelForm):
             "start_time_before",
             "end_time_after",
             "end_time_before",
-        ]
-
-
-class CustomFieldVersionFilterForm(forms.Form):
-    def __init__(self, *args, **kwargs):
-        self.obj_type = ContentType.objects.get_for_model(self.model)
-        super().__init__(*args, **kwargs)
-        custom_fields = CustomField.objects.get(content_types=self.obj_type, name=CF_NAME_SW_VERSION)
-        field_name = "cf_{}".format(custom_fields.name)
-        self.fields[field_name] = custom_fields.to_form_field(set_initial=True, enforce_required=False)
-
-
-class UpgradeDeviceFilterForm(BootstrapMixin, CustomFieldVersionFilterForm):
-    model = Device
-    field_order = ["q", "role", "tenant", "device_type_id", "tag", "target_sw"]
-    q = forms.CharField(required=False, label="Search")
-    tenant = DynamicModelMultipleChoiceField(
-        queryset=Tenant.objects.all(),
-        to_field_name="slug",
-        required=False,
-    )
-    role = DynamicModelMultipleChoiceField(
-        queryset=DeviceRole.objects.all(),
-        to_field_name="slug",
-        required=False,
-    )
-    device_type_id = DynamicModelMultipleChoiceField(
-        queryset=DeviceType.objects.all(),
-        required=False,
-        label="Model",
-        display_field="model",
-    )
-    target_sw = forms.CharField(
-        label="Target SW",
-        required=False,
-        help_text="Target SW Version",
-    )
-    tag = TagFilterField(model)
+        )

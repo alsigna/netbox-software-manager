@@ -1,19 +1,23 @@
-{% extends 'software_manager/my_obj_list.html' %}
+{% extends 'generic/object_list.html' %}
+{% load my_form_helpers %}
 
-{% block buttons %}
-<a href="{% url 'plugins:software_manager:upgrade_device_list' %}" class="btn btn-primary">
-    <span class="glyphicon glyphicon-list" aria-hidden="true"></span> Upgrade Devices
-</a>
-{% endblock %}
+{% block controls %}
+<div class="controls">
+    <div class="control-group">
+        <a href="{% url 'plugins:software_manager:upgradedevice_list' %}" class="btn btn-primary btn-sm">
+            <span class="mdi mdi-forward" aria-hidden="true"></span>Upgrade Device
+        </a>
+    </div>
+</div>
+{% endblock controls %}
 
-{% block title %}Scheduled Tasks{% endblock %}
+{% block title %}Scheduled Tasks{% endblock title %}
 
 {% block bulk_buttons %}
-<button type="submit" name="_task" formaction="{% url 'plugins:software_manager:upgrade_device_scheduler' %}" class="btn btn-success btn-sm">
-    <span class="glyphicon glyphicon-plus" aria-hidden="true"></span> Re-Schedule Tasks
+<button type="submit" name="_tasks" class="btn btn-success btn-sm" formaction="{% url 'plugins:software_manager:upgradedevice_scheduler' %}">
+    <span class="mdi mdi-update" aria-hidden="true"></span> Re-Schedule Selected
 </button>
-
-<button type="submit" name="_delete" formaction="{% url 'plugins:software_manager:scheduled_task_bulk_delete' %}{% if request.GET %}?{{ request.GET.urlencode }}{% endif %}" class="btn btn-danger btn-sm">
-    <span class="glyphicon glyphicon-trash" aria-hidden="true"></span> Delete Selected
+<button type="submit" name="_delete" class="btn btn-danger btn-sm" formaction="{% url 'plugins:software_manager:scheduledtask_bulk_delete' %}{% if request.GET %}?{{ request.GET.urlencode }}{% endif %}">
+    <span class="mdi mdi-trash-can-outline" aria-hidden="true"></span> Delete Selected
 </button>
-{% endblock %}
+{% endblock bulk_buttons %}

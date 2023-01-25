@@ -5,7 +5,7 @@ with open("README.md", "r") as f:
 
 setup(
     name="netbox-plugin-software-manager",
-    version="0.0.3",
+    version="0.0.4",
     description="Software Manager for Cisco IOS/IOS-XE devices",
     long_description=long_description,
     long_description_content_type="text/markdown",
@@ -13,8 +13,7 @@ setup(
     license="MIT",
     install_requires=[
         "scrapli[paramiko]",
-        "rq-scheduler",
-        "xlsxwriter",
+        "scrapli[textfsm]",
     ],
     packages=find_packages(),
     include_package_data=True,

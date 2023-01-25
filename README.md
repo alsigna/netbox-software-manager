@@ -1,19 +1,20 @@
 # Software Manager - NetBox plugin
 
 [NetBox](https://github.com/netbox-community/netbox) plugin to manage software for your Cisco devices in following aspects:
-- software repository (download does not work after Gunicorn was changed to nginx-unit, trying to manage with it)
+
+- software repository
 - assign target (golden) image on created Device Types
-- get software version compliance report for every device in Excel format
 - scheduled upload golden image on devices
 - scheduled reload devices with golden image
 
 ## Important notes
 
-1. Compatible with NetBox 2.9 and higher versions only.
+1. Developed on NetBox 3.4.3 and compatible (probably) with other versions, but not tested.
 2. Plugin works with standalone IOS/IOS-XE boxes only. No Stacks/VSS/StackWiseVirtual at present.
 3. Plugin operates with software version only, and does not consider feature set (lanlite vs lanbase, K9 vs NPE).
 4. Test in your local sandbox, do not jump to production network.
 5. Use this plugin on production network at one's own risk with take responsibility for any potential outages due to reload of devices.
+6. Don't hesitate to contact me for any bugs/feature requests.
 
 ## Software Repository
 
@@ -23,9 +24,13 @@
 
 ### Add/Edit software page
 
-<img src="static/add_software.png" width="50%">
+<img src="static/software_add.png" width="50%">
 
 Select *.bin file, specify expected MD5 (from cisco site) and verbose version. Plugin calculates MD5 when file uploading and result should matches with entered MD5, otherwise MD5 will be redded.
+
+### Software image details
+
+<img src="static/software_details.png" width="50%">
 
 ## Golden Images
 
@@ -33,7 +38,7 @@ Select *.bin file, specify expected MD5 (from cisco site) and verbose version. P
 
 <img src="static/golden_images.png" width="75%">
 
-Assigned Image/Version for all created DeviceTypes with upgrade progress for particular DeviceType. "Export" button provides detailed Excel report.
+Assigned Image/Version for all created DeviceTypes with upgrade progress for particular DeviceType.
 
 ## Upgrade Devices
 
@@ -50,8 +55,10 @@ provides information about Target/Current versions (green = match, yellow = upgr
 <img src="static/scheduled_task_add.png" width="75%">
 
 - Select job type:
-    - upload (transfer golden image to the box)
-    - upgrade (reload with golden image w/o transfer)
+
+  - upload (transfer golden image to the box)
+  - upgrade (reload with golden image w/o transfer)
+
 - select time to start or set "Start Now". Time is based on NetBox TimeZone, not your browser/hostPC.
 - select MW duration. All tasks will be skipped after this time (countdown starts from scheduled time, not from time of creation tasks)
 
@@ -91,19 +98,19 @@ docker build -t netbox-plugin .
 > Dockerfile:
 >
 > ```dockerfile
-> FROM netboxcommunity/netbox:latest-ldap
+> FROM netboxcommunity/netbox:v3.4.3-2.4.0
 >
-> # install scrapli[paramiko], rq-scheduler, xlsxwriter
+> # install scrapli[paramiko], scrapli[textfsm]
 > COPY requirements.txt /requirements.txt
 > RUN /opt/netbox/venv/bin/python -m pip install -r /requirements.txt
 >
-> # make folder for image location. Shold be in django media folder
-> # folder name (software-images in example) is used as FTP username and should be copied to NetBox configuration.py file. Remember this name.
+> # make folder for image location. Should be in django media folder
+> # folder name (software-images in example).
 > RUN mkdir /opt/netbox/netbox/media/software-images/
 > RUN chown -R unit:unit /opt/netbox/netbox/media/software-images
 >
-> # Add additional queue (software_manager in example). This name should be copied to NetBox configuration.py. Remember this name.
-> RUN echo $'\n\
+> # Add additional queue (software_manager in example). This name should be copied to NetBox configuration.py.
+> RUN echo '\n\
 > RQ_QUEUES["software_manager"]=RQ_PARAMS\n\
 > ' >> /opt/netbox/netbox/netbox/settings.py
 > 
@@ -117,23 +124,26 @@ docker build -t netbox-plugin .
 > #--Pip
 > RUN /opt/netbox/venv/bin/python -m pip install /source/SoftwareManager/
 
-## 2. Create FTP docker image based on [docker-alpine-ftp-server](https://github.com/delfer/docker-alpine-ftp-server)
+## 2. Create FTP or HTTP docker image
 
->Why FTP? Originally scp was used to transfer files, but based on experience, FTP is much faster.
+for FTP [docker-alpine-ftp-server](https://github.com/delfer/docker-alpine-ftp-server) is used. For HTTP nginx base image is used.
 
->HTTP was added in 0.0.3, But FTP_USERNAME in configuration still required as it used as folder name for IOS upload
+>Originally scp was used to transfer files, but based on experience, FTP/HTTP is much faster.
 
 ```shell
 cd ftp
 docker build -t ftp_for_netbox .
 cd ../../
 ```
+
 or
+
 ```shell
 cd http
 docker build -t http_for_netbox .
 cd ../../
 ```
+
 ## 3. Change docker-compose.yml
 
 ```dockerfile
@@ -147,7 +157,7 @@ cd ../../
       # Replace nginx-unit config
       - ./netbox-software-manager/nginx-unit.json:/etc/unit/nginx-unit.json:z,ro
       # Mount folder with IOS images. NetBox will upload/delete images.
-      # Format: /opt/netbox/netbox/media/{{ FTP_SERVER_USRNAME}}
+      # Format: /opt/netbox/netbox/media/{{ IMAGE_FOLDER }}
       - ./netbox-software-manager/software-images:/opt/netbox/netbox/media/software-images:z
       # Mount script for rq
       - ./netbox-software-manager/rq.sh:/etc/netbox/rq.sh:z,ro
@@ -184,7 +194,7 @@ cd ../../
       # Your external (host) IP address, not contaner's IP
       - ADDRESS=192.168.0.1
   
-  # simple http server
+  # OR HTTP server
   http:
     image: http_for_netbox
     ports:
@@ -199,36 +209,36 @@ cd ../../
 
 ```python
 PLUGINS = [
-    'software_manager',
+    "software_manager",
 ]
 
 PLUGINS_CONFIG = {
-    'software_manager': {
+    "software_manager": {
         # Device credentials
-        'DEVICE_USERNAME': 'cisco',
-        'DEVICE_PASSWORD': 'cisco',
-        # FTP credentials
-        'FTP_USERNAME': 'software-images',
-        'FTP_PASSWORD': 'ftp_password',
-        'FTP_SERVER': '192.168.0.1',
-        # HTTP server name with patch to images
-        "HTTP_SERVER": "http://192.168.0./",
-        # Default transport method, can be also changed while scheduling task, [tfp|http]
-        "DEFAULT_TRANSFER_METHOD": "ftp",
-
+        "DEVICE_USERNAME": "cisco",
+        "DEVICE_PASSWORD": "cisco",
+        # FTP credentials (can be skipped if HTTP is used)
+        "FTP_USERNAME": "ftp-user",
+        "FTP_PASSWORD": "ftp_password",
+        "FTP_SERVER": "192.168.0.1",
+        # HTTP server name with patch to images (can be skipped if FTP is used)
+        "HTTP_SERVER": "http://10.8.0.1:8001/",
+        # Default transport method, [tfp|http]
+        "DEFAULT_TRANSFER_METHOD": "http",
         # Log file
-        'UPGRADE_LOG_FILE': '/var/log/upgrade.log',
-        # Queue name. Check step 1. Should be the same
-        'UPGRADE_QUEUE': 'software_manager',
-        # Threshold for non-ACK check
-        'UPGRADE_THRESHOLD': 2,
-        # Number of tries to connect to device before declare that we lost it.
-        'UPGRADE_MAX_ATTEMPTS_AFTER_RELOAD': 10,
-        # Hold timer between tries
-        'UPGRADE_SECONDS_BETWEEN_ATTEMPTS': 60,
-
+        "UPGRADE_LOG_FILE": "/var/log/upgrade.log",
+        # Queue name. Check step 1 (dockerfile). Should be the same
+        "UPGRADE_QUEUE": "software_manager",
         # Custom field name which is used for store current SW version
-        'CF_NAME_SW_VERSION': 'sw_version',
+        "CF_NAME_SW_VERSION": "sw_version",
+        # folder name for image storing. located in netbox media.
+        "IMAGE_FOLDER": "software-images",
+        # Threshold for non-ACK check
+        "UPGRADE_THRESHOLD": 2,
+        # Number of tries to connect to device before declare that we lost it.
+        "UPGRADE_MAX_ATTEMPTS_AFTER_RELOAD": 10,
+        # Hold timer between tries
+        "UPGRADE_SECONDS_BETWEEN_ATTEMPTS": 60,
     }
 }
 ```
@@ -248,6 +258,7 @@ PLUGINS_CONFIG = {
 ## nginx-unit.json
 
 Original NetBox config is used with max_body_size:
+
 ```json
 "settings": {
   "http": {
@@ -257,6 +268,7 @@ Original NetBox config is used with max_body_size:
 ```
 
 ## rq.sh script
+
 ```shell
 #!/bin/bash
 
@@ -267,12 +279,7 @@ Original NetBox config is used with max_body_size:
 /opt/netbox/venv/bin/python /opt/netbox/netbox/manage.py rqworker software_manager &
 /opt/netbox/venv/bin/python /opt/netbox/netbox/manage.py rqworker software_manager &
 
-# start scheduler
-/opt/netbox/venv/bin/python /opt/netbox/netbox/manage.py rqscheduler &
-
 # start default netbox worker
-/opt/netbox/venv/bin/python /opt/netbox/netbox/manage.py rqworker check_releases default
+/opt/netbox/venv/bin/python /opt/netbox/netbox/manage.py rqworker high default low
 exec "$@"
-
 ```
-

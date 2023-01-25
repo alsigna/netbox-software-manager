@@ -1,0 +1,99 @@
+{% extends 'generic/object.html' %}
+{% load render_table from django_tables2 %}
+
+{% block controls %}
+  <div class="controls">
+    <div class="control-group">
+        <a href="{% url 'plugins:software_manager:scheduledtask_list' %}" class="btn btn-primary btn-sm">
+            <span class="mdi mdi-forward" aria-hidden="true"></span>Scheduled Tasks List
+        </a>
+        <a href="{% url 'plugins:software_manager:scheduledtask_delete' pk=object.pk %}" class="btn btn-danger btn-sm">
+            <span class="mdi mdi-trash-can-outline" aria-hidden="true"></span>Delete
+        </a>
+    </div>
+  </div>
+{% endblock controls %}
+
+
+{% block content %}
+
+<div class="row mb-3">
+    <div class="col col-md-4">
+        <div class="card">
+            <h5 class="card-header">Task</h5>
+            <div class="card-body">
+                <table class="table table-hover attr-table">
+                    <tr>
+                        <td>Job ID</td>
+                        <td>{{ object.job_id }}</td>
+                    </tr>
+                    <tr>
+                        <td>User</td>
+                        <td>{{ object.user }}</td>
+                    </tr>
+                    <tr>
+                        <td>Device</td>
+                        <td><a href="{{ object.device.get_absolute_url }}">{{ object.device }}</a></td>
+                    </tr>
+                    <tr>
+                        <td>Platform</td>
+                        <td><a href="{{ object.device.device_type.get_absolute_url }}">{{ object.device.device_type }}</a></td>
+                    </tr>
+                    <tr>
+                        <td>IP Address</td>
+                        <td>{{ object.device.primary_ip.address.ip }}</td>
+                    </tr>
+                    <tr>
+                        <td>Image</td>
+                        <td>{{ object.device.device_type.golden_image.sw.filename }}</td>
+                    </tr>
+                    <tr>
+                        <td>Transfer Method</td>
+                        <td>{{ object.transfer_method }}</td>
+                    </tr>
+                    <tr>
+                        <td>Job Status</td>
+                        <td>{{ object.status }}</td>
+                    </tr>
+                    <tr>
+                        <td>Message</td>
+                        <td>{{ object.message }}</td>
+                    </tr>
+                    <tr>
+                        <td>Action</td>
+                        <td>{{ object.task_type }}</td>
+                    </tr>
+                    <tr>
+                        <td>Created Time</td>
+                        <td>{{ object.timestamp|date:"M d, Y H:i:s" }}</td>
+                    </tr>
+                    <tr>
+                        <td>Scheduled Time</td>
+                        <td>{{ object.scheduled_time|date:"M d, Y H:i:s" }}</td>
+                    </tr>
+                    <tr>
+                        <td>Start Time</td>
+                        <td>{{ object.start_time|date:"M d, Y H:i:s" }}</td>
+                    </tr>
+                    <tr>
+                        <td>End Time</td>
+                        <td>{{ object.end_time|date:"M d, Y H:i:s" }}</td>
+                    </tr>    
+                </table>
+            </div>
+        </div>
+    </div>
+    <div class="col col-md-8">
+        <div class="card">
+            <h5 class="card-header">
+                Execution Log
+            </h5>
+            <div class="card-body">
+                <pre>{{ object.log }}</pre>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+{% endblock content %}
