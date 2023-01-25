@@ -6,7 +6,7 @@ RUN /opt/netbox/venv/bin/python -m pip install -r /requirements.txt
 RUN mkdir /opt/netbox/netbox/media/software-images/
 RUN chown -R unit:unit /opt/netbox/netbox/media/software-images
 
-RUN echo $'\n\
+RUN echo '\n\
 RQ_QUEUES["software_manager"]=RQ_PARAMS\n\
 ' >> /opt/netbox/netbox/netbox/settings.py
 
