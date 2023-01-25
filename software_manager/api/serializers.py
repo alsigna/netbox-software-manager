@@ -52,6 +52,7 @@ class SoftwareImageSerializer(ValidatedModelSerializer):
             "created",
             "last_updated",
             "image",
+            "supported_devicetypes",
             "md5sum",
             "md5sum_calculated",
             "version",
