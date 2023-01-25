@@ -30,7 +30,7 @@ class SoftwareImage(NetBoxModel):
         blank=True,
     )
 
-    supported_devices = models.OneToManyField(
+    supported_devicetypes = models.OneToManyField(
         to=DeviceType,
         on_delete=models.CASCADE,
         related_name="software_images",
