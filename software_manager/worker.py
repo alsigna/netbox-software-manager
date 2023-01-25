@@ -1,76 +1,80 @@
-import pytz
-
 from datetime import datetime
-from django_rq import job, get_queue
-from django.db.models import Count
+
+import pytz
 from django.conf import settings
+from django.db.models import Count
+from django_rq import get_queue, job
 
-from .models import ScheduledTask
 from .choices import TaskStatusChoices
-from .upgrade import UpgradeDevice, UpgradeException
+from .models import ScheduledTask
+from .task_exceptions import TaskException
+from .task_executor import TaskExecutor
 
-
-PLUGIN_SETTINGS = settings.PLUGINS_CONFIG.get('software_manager', dict())
-UPGRADE_QUEUE = PLUGIN_SETTINGS.get('UPGRADE_QUEUE', '')
+PLUGIN_SETTINGS = settings.PLUGINS_CONFIG.get("software_manager", dict())
+UPGRADE_QUEUE = PLUGIN_SETTINGS.get("UPGRADE_QUEUE", "")
 
 
 @job(UPGRADE_QUEUE)
 def upgrade_device(task_id):
-
-    def summary(status):
-        q = get_queue(UPGRADE_QUEUE)
+    def add_summary(status):
+        queue = get_queue(UPGRADE_QUEUE)
         total = ScheduledTask.objects.filter(scheduled_time=task.scheduled_time).count()
-        field = 'status'
-        stats = ScheduledTask.objects.filter(scheduled_time=task.scheduled_time).values(field).order_by(field).annotate(sum=Count(field))
-        overall = ''
+        field = "status"
+        stats = (
+            ScheduledTask.objects.filter(scheduled_time=task.scheduled_time)
+            .values(field)
+            .order_by(field)
+            .annotate(sum=Count(field))
+        )
+        overall = ""
         for i in stats:
             overall = f'{overall} / {i["status"]} {i["sum"]}'
-        overall = f'total {total}{overall}'
-        device.info(f'Task ended with status "{status}"')
-        device.info(f'Summary: {overall}')
-        if q.count == 0:
-            if q.started_job_registry.count == 1:
-                device.info('All tasks have been completed.')
+        overall = f"total {total}{overall}"
+        executor.info(f'Task ended with status "{status}"')
+        executor.info(f"Summary: {overall}")
+        if queue.count == 0:
+            if queue.started_job_registry.count == 1:
+                executor.info("All tasks have been completed.")
             else:
-                device.info('No queued tasks were remained')
+                executor.info("No queued tasks were remained")
         else:
-            device.info(f'Remained task: {q.count}. Taking the next one.')
+            executor.info(f"Remained task: {queue.count}. Taking the next one.")
 
     try:
         task = ScheduledTask.objects.get(id=task_id)
     except Exception:
         raise
 
-    task.start_time = datetime.now().replace(microsecond=0, tzinfo=pytz.utc)
+    task.start_time = datetime.now().replace(microsecond=0).astimezone(pytz.utc)
     task.status = TaskStatusChoices.STATUS_RUNNING
     task.save()
 
+    executor = TaskExecutor(task)
     try:
-        device = UpgradeDevice(task)
-        device.execute_task()
-    except UpgradeException as e:
+        executor.execute_task()
+    except TaskException as exc:
         if task.status == TaskStatusChoices.STATUS_SKIPPED:
-            task.end_time = datetime.now().replace(microsecond=0, tzinfo=pytz.utc)
+            task.end_time = datetime.now().replace(microsecond=0).astimezone(pytz.utc)
             task.confirmed = True
             task.save()
-            summary(task.status)
-            return f'Task was skipped. {e.reason}: {e.message}'
-        task.end_time = datetime.now().replace(microsecond=0, tzinfo=pytz.utc)
+            add_summary(task.status)
+            return f"Task was skipped. {exc.reason}: {exc.message}"
+        task.end_time = datetime.now().replace(microsecond=0).astimezone(pytz.utc)
         task.save()
-        summary(task.status)
+        add_summary(task.status)
         raise
     except Exception:
         task.status = TaskStatusChoices.STATUS_FAILED
-        task.message = 'Unknown Error'
-        task.end_time = datetime.now().replace(microsecond=0, tzinfo=pytz.utc)
+        task.message = "Unknown Error"
+        task.end_time = datetime.now().replace(microsecond=0).astimezone(pytz.utc)
         task.save()
-        summary(task.status)
+        add_summary(task.status)
         raise
 
-    task.end_time = datetime.now().replace(microsecond=0, tzinfo=pytz.utc)
+    task.end_time = datetime.now().replace(microsecond=0).astimezone(pytz.utc)
     task.status = TaskStatusChoices.STATUS_SUCCEEDED
     task.confirmed = True
     task.save()
-    summary(task.status)
+    add_summary(task.status)
 
-    return f'{task.device.name}/{task.task_type}: Done'
+    return f"{task.device.name}/{task.task_type}: Done"

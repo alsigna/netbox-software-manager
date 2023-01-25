@@ -1,0 +1,20 @@
+{% extends 'generic/object_list.html' %}
+{% load my_form_helpers %}
+
+{% block controls %}
+<div class="controls">
+    <div class="control-group">
+        <a href="{% url 'plugins:software_manager:scheduledtask_list' %}" class="btn btn-primary btn-sm">
+            <span class="mdi mdi-update" aria-hidden="true"></span>Scheduled Tasks
+        </a>
+    </div>
+</div>
+{% endblock controls %}
+
+{% block title %}Upgrade Devices{% endblock title %}
+
+{% block bulk_buttons %}
+<button type="submit" name="_devices" class="btn btn-success btn-sm" formaction="{% url 'plugins:software_manager:upgradedevice_scheduler' %}">
+    <span class="mdi mdi-forward" aria-hidden="true"></span> Schedule Tasks
+</button>
+{% endblock bulk_buttons %}

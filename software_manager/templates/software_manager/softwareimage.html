@@ -1,0 +1,53 @@
+{% extends 'generic/object.html' %}
+{% load render_table from django_tables2 %}
+
+{% block content %}
+
+<div class="row mb-3">
+    <div class="col col-md-6">
+        <div class="card">
+            <h5 class="card-header">Software Image</h5>
+            <div class="card-body">
+                <table class="table table-hover attr-table">
+                    <tr>
+                        <td>Version</td>
+                        <td style="white-space:nowrap">{{ object.version|placeholder }}</td>
+                    </tr>
+                    <tr>
+                        <td>Image Name</td>
+                        <td style="white-space:nowrap">{{ object.filename|placeholder }}</td>
+                    </tr>
+                    <tr>
+                        <td>Image Size</td>
+                        <td style="white-space:nowrap">
+                            {% if object.image.name %}
+                                {{ object.image.size|filesizeformat }}
+                            {% else %}
+                                <span>&mdash;</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>Expected MD5</td>
+                        <td style="white-space:nowrap; font-family: monospace; font-size: initial">{{ object.md5sum|placeholder }}</td>
+                    </tr>
+                    <tr>
+                        <td>Calculated MD5</td>
+                        <td style="white-space:nowrap; font-family: monospace; font-size: initial">{{ object.md5sum_calculated|placeholder }}</td>
+                    </tr>
+                    <tr>
+                        <td>Added Date</td>
+                        <td style="white-space:nowrap">{{ object.created|placeholder }}</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+    </div>
+    <div class="col col-md-6">
+        {% include 'inc/panels/comments.html' %}
+        {% include 'inc/panels/tags.html' %}
+    </div>
+</div>
+
+
+{% endblock content %}

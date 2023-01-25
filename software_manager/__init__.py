@@ -5,7 +5,7 @@ class SoftwareManager(PluginConfig):
     name = "software_manager"
     verbose_name = "Software Manager"
     description = "Software Manager for Cisco IOS/IOS-XE devices"
-    version = "0.0.3"
+    version = "0.0.4"
     author = "Alexander Ignatov"
     author_email = "ignatov.alx@gmail.com"
     required_settings = []
