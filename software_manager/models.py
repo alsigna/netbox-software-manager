@@ -24,15 +24,14 @@ UPGRADE_QUEUE = PLUGIN_SETTINGS.get("UPGRADE_QUEUE", "")
 
 class SoftwareImage(NetBoxModel):
     image = models.FileField(
-        upload_to=f"{IMAGE_FOLDER}/",
-        validators=[FileExtensionValidator(allowed_extensions=["bin"])],
+        upload_to=f"{IMAGE_FOLDER}",
+        validators=[FileExtensionValidator(allowed_extensions=["bin","tgz"])],
         null=True,
         blank=True,
     )
 
-    supported_devicetypes = models.OneToManyField(
+    supported_devicetypes = models.ManyToManyField(
         to=DeviceType,
-        on_delete=models.CASCADE,
         related_name="software_images",
     )
         
