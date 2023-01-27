@@ -19,7 +19,7 @@ from .task_exceptions import TaskException
 
 from jnpr.junos import Device as JDevice
 from jnpr.junos.utils.scp import SCP
-
+from jnpr.junos.utils.fs import FS
 
 PLUGIN_SETTINGS = settings.PLUGINS_CONFIG.get("software_manager", dict())
 DEVICE_USERNAME = PLUGIN_SETTINGS.get("DEVICE_USERNAME", "")
@@ -187,13 +187,23 @@ class TaskExecutor(TaskLoggerMixIn):
         return True
 
     def _is_alive(self, ports: tuple = (22, 23)) -> int | None:
-        for port in ports:
+        ''' use port 830 for junos - netconf '''
+        if self.task.device.device_type.golden_image.sw.image_type == "junos" or self.task.device.device_type.golden_image.sw.image_type == "junossr":
             try:
+                port = 830
                 self._is_port_open(port)
             except Exception:
                 pass
             else:
                 return port
+        else:
+            for port in ports:
+                try:
+                    self._is_port_open(port)
+                except Exception:
+                    pass
+                else:
+                    return port
 
     def _get_cli(self, **kwargs) -> None | IOSXEDriver:
         def fallback_to_telnet(cli, **kwargs) -> None | IOSXEDriver:
@@ -371,17 +381,35 @@ class TaskExecutor(TaskLoggerMixIn):
 
     def _validate_device(self) -> None:
         self.info("Device valiation...")
+        if self.task.device.device_type.golden_image.sw.image_type == "junos" or self.task.device.device_type.golden_image.sw.image_type == "junossr":
+            ''' replacement for _validate_pid_sn '''
+            self.debug(f"Running JUNOS/JUNOS-SR device validation")
+            dev = JDevice(host=str(self.task.device.primary_ip.address.ip),user=DEVICE_USERNAME,passwd=DEVICE_PASSWORD)   
+            dev.open()
+            if dev.facts['serialnumber'].lower() != self.task.device.serial.lower() or dev.facts['model'].lower() != self.task.device.device_type.model.lower():
+                msg = "Device PID/SN does not match with NetBox data"
+                self.error(msg)
+                self.skip_task(msg, reason=TaskFailReasonChoices.FAIL_CONFIG)
+            self.info(f"Device '{dev.facts['model']}/{dev.facts['serialnumber']} matches with NetBox data")
 
-        commands = ["show version", "dir /all"]
-        outputs = self._send_commands(commands)
-        self.debug("----------vv Outputs vv----------")
-        for output in outputs:
-            self.debug("\n" + output.result)
-        self.debug("----------^^ Outputs ^^----------")
-        self._validate_pid_sn(outputs[0])
-        self._validate_image_file(outputs[1])
+            if not self.task.device.device_type.golden_image.sw.image_exists:
+                self.debug(f"SoftwareImage was created without file, no need to validate against device files")
+                return           
+            filesys = FS(dev)
+            self.debug(filesys.storage_usage())
 
-        self.info("Device has been validated")
+            self.info("Device has been validated")
+        else:
+            commands = ["show version", "dir /all"]
+            outputs = self._send_commands(commands)
+            self.debug("----------vv Outputs vv----------")
+            for output in outputs:
+                self.debug("\n" + output.result)
+            self.debug("----------^^ Outputs ^^----------")
+            self._validate_pid_sn(outputs[0])
+            self._validate_image_file(outputs[1])
+
+            self.info("Device has been validated")
 
     def _initial_check(self) -> None:
         self.info("Initial checking...")
@@ -719,8 +747,8 @@ class TaskExecutor(TaskLoggerMixIn):
 
     def execute_task(self) -> bool:
         self.info(f"New Job {self.task.job_id} was started. Type {self.task.task_type}")
-        #self._initial_check()
-        #self._validate_device()
+        self._initial_check()
+        self._validate_device()
 
         if self.task.task_type == TaskTypeChoices.TYPE_UPLOAD:
             self.info("Upload task")
