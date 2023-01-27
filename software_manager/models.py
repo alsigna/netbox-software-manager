@@ -13,7 +13,7 @@ from rq.exceptions import NoSuchJobError
 from rq.job import Job
 from utilities.querysets import RestrictedQuerySet
 
-from .choices import TaskFailReasonChoices, TaskStatusChoices, TaskTransferMethod, TaskTypeChoices
+from .choices import TaskFailReasonChoices, TaskStatusChoices, TaskTransferMethod, TaskTypeChoices, ImageTypeChoices
 
 PLUGIN_SETTINGS = settings.PLUGINS_CONFIG.get("software_manager", dict())
 CF_NAME_SW_VERSION = PLUGIN_SETTINGS.get("CF_NAME_SW_VERSION", "")
@@ -29,6 +29,13 @@ class SoftwareImage(NetBoxModel):
         null=True,
         blank=True,
     )
+
+    image_type = models.CharField(
+        max_length=255,
+        choices=ImageTypeChoices,
+        default=ImageTypeChoices.TYPE_JUNOS,
+    )
+
 
     supported_devicetypes = models.ManyToManyField(
         to=DeviceType,

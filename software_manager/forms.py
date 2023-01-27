@@ -15,7 +15,7 @@ from utilities.forms import (
     TagFilterField,
 )
 
-from .choices import TaskStatusChoices, TaskTransferMethod, TaskTypeChoices
+from .choices import TaskStatusChoices, TaskTransferMethod, TaskTypeChoices, ImageTypeChoices
 from .models import GoldenImage, ScheduledTask, SoftwareImage
 
 PLUGIN_SETTINGS = settings.PLUGINS_CONFIG.get("software_manager", dict())
@@ -62,6 +62,7 @@ class SoftwareImageEditForm(NetBoxModelForm):
         model = SoftwareImage
         fields = [
             "image",
+            "image_type",
             "supported_devicetypes",
             "md5sum",
             "version",

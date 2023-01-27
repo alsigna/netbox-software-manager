@@ -167,6 +167,12 @@ class SoftwareImageListTable(NetBoxTable):
         verbose_name="Version",
         orderable=False,
     )
+
+    image_type = tables.Column(
+        verbose_name = "Image Type",
+        orderable = False,
+    )
+
     size = tables.TemplateColumn(
         verbose_name="Size",
         template_code=SW_LIST_SIZE,
@@ -197,6 +203,7 @@ class SoftwareImageListTable(NetBoxTable):
             "pk",
             "id",
             "filename",
+            "image_type",
             "version",
             "size",
             "supported_devicetypes",
@@ -208,6 +215,7 @@ class SoftwareImageListTable(NetBoxTable):
         )
         default_columns = (
             "filename",
+            "image_type",
             "version",
             "size",
             "supported_devicetypes",
