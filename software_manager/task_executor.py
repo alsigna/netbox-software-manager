@@ -401,19 +401,18 @@ class TaskExecutor(TaskLoggerMixIn):
             ''' regex for <path> <blocks> <used> <avail> <capacity> <mounted> '''     
             re_df = re.compile("([a-zA-Z0-9\/]+)[\s]+([0-9]+)[\s]+([0-9]+)[\s]+([0-9]+)[\s]+([0-9\%]+)[\s]+(.*)")
             with StartShell(dev) as ss:
-                (return_code,output) = ss.run('df -k /var/tmp')
+                (return_code,output) = ss.run('df /var/tmp')
                 for line in output.splitlines():
                     t = re_df.match(line)
                     if t:
-                        self.total_free = t.group(4)
+                        self.total_free = int(t.group(4)) * 1024
 
                 (return_code,output) = ss.run('ls /var/tmp')
         
                 self.file_system = "/var/tmp"
                 self.target_image = self.task.device.device_type.golden_image.sw.filename
                 target_path = self.task.device.device_type.golden_image.sw.image.path
-                if self.task.device.device_type.golden_image.sw.filename in list(output.splitlines()):
-                    self.image_on_device = self.task.device.device_type.golden_image.sw.filename
+                self.image_on_device = list(filter(lambda x: x == self.task.device.device_type.golden_image.sw.filename, output.splitlines()))
 
             self.debug(f"Filesystem: {self.file_system}")
             self.debug(f"Target Image: {self.target_image}")

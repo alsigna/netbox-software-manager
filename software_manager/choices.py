@@ -27,10 +27,12 @@ class TaskTypeChoices(ChoiceSet):
 class TaskTransferMethod(ChoiceSet):
     METHOD_FTP = "ftp"
     METHOD_HTTP = "http"
+    METHOD_SCP = "scp"
 
     CHOICES = (
         (METHOD_FTP, "ftp"),
         (METHOD_HTTP, "http"),
+        (METHOD_SCP, "scp")
     )
 
 
