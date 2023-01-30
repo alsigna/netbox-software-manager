@@ -9,6 +9,8 @@
 
 ## Important notes
 
+*JUNOS SUPPORT* - limited to upload via SCP only currently, attempts to upgrade will break things!
+
 1. Developed on NetBox 3.4.3 and compatible (probably) with other versions, but not tested.
 2. Plugin works with standalone IOS/IOS-XE boxes only. No Stacks/VSS/StackWiseVirtual at present.
 3. Plugin operates with software version only, and does not consider feature set (lanlite vs lanbase, K9 vs NPE).
