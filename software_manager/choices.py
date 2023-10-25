@@ -1,6 +1,19 @@
 from utilities.choices import ChoiceSet
 
 
+class ImageTypeChoices(ChoiceSet):
+    TYPE_JUNOS = "junos"
+    TYPE_JUNOSSR = "junos sr"
+    TYPE_IOS = "ios"
+    TYPE_IOSXE = "iosxe"
+
+    CHOICES = (
+        (TYPE_JUNOS, "JUNOS"),
+        (TYPE_JUNOSSR, "JUNOS-SR"),
+        (TYPE_IOS, "IOS"),
+        (TYPE_IOSXE, "IOS-XE"),
+    )
+
 class TaskTypeChoices(ChoiceSet):
     TYPE_UPLOAD = "upload"
     TYPE_UPGRADE = "upgrade"
@@ -14,10 +27,12 @@ class TaskTypeChoices(ChoiceSet):
 class TaskTransferMethod(ChoiceSet):
     METHOD_FTP = "ftp"
     METHOD_HTTP = "http"
+    METHOD_SCP = "scp"
 
     CHOICES = (
         (METHOD_FTP, "ftp"),
         (METHOD_HTTP, "http"),
+        (METHOD_SCP, "scp")
     )
 
 

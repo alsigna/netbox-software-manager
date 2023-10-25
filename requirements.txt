@@ -1,2 +1,3 @@
 scrapli[paramiko]
 scrapli[textfsm]
+junos_eznc

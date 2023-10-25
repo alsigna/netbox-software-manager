@@ -32,6 +32,7 @@ SW_LIST_MD5SUM = """
 {% endif %}
 """
 
+
 SW_LIST_DOWNLOAD_IMAGE = """
 {% if record.image_exists %}
     <a href="{{ record.image.url }}" target="_blank" class="btn btn-sm btn-primary" title="Download Image">
@@ -166,11 +167,24 @@ class SoftwareImageListTable(NetBoxTable):
         verbose_name="Version",
         orderable=False,
     )
+
+    image_type = tables.Column(
+        verbose_name = "Image Type",
+        orderable = False,
+    )
+
     size = tables.TemplateColumn(
         verbose_name="Size",
         template_code=SW_LIST_SIZE,
         orderable=False,
     )
+
+    supported_devicetypes=tables.ManyToManyColumn(
+        orderable=False,
+        verbose_name = "Supported Device Types",
+        linkify_item=True
+    )
+
     md5sum = tables.TemplateColumn(
         verbose_name="MD5 Checksum",
         template_code=SW_LIST_MD5SUM,
@@ -189,8 +203,10 @@ class SoftwareImageListTable(NetBoxTable):
             "pk",
             "id",
             "filename",
+            "image_type",
             "version",
             "size",
+            "supported_devicetypes",
             "md5sum",
             "tags",
             "actions",
@@ -199,8 +215,10 @@ class SoftwareImageListTable(NetBoxTable):
         )
         default_columns = (
             "filename",
+            "image_type",
             "version",
             "size",
+            "supported_devicetypes",
             "md5sum",
             "tags",
             "actions",
@@ -231,7 +249,7 @@ class GoldenImageListTable(NetBoxTable):
     progress = tables.TemplateColumn(
         template_code=GOLDEN_IMAGE_PROGRESS_GRAPH,
         orderable=False,
-        verbose_name="Progress",
+        verbose_name="Compliance",
     )
 
     actions = tables.TemplateColumn(

@@ -17,12 +17,6 @@ from .logger import TaskLoggerMixIn
 from .models import ScheduledTask
 from .task_exceptions import TaskException
 
-from jnpr.junos import Device as JDevice
-from jnpr.junos.utils.scp import SCP
-from jnpr.junos.utils.fs import FS
-from jnpr.junos.utils.start_shell import StartShell
-import re
-
 PLUGIN_SETTINGS = settings.PLUGINS_CONFIG.get("software_manager", dict())
 DEVICE_USERNAME = PLUGIN_SETTINGS.get("DEVICE_USERNAME", "")
 DEVICE_PASSWORD = PLUGIN_SETTINGS.get("DEVICE_PASSWORD", "")
@@ -189,23 +183,13 @@ class TaskExecutor(TaskLoggerMixIn):
         return True
 
     def _is_alive(self, ports: tuple = (22, 23)) -> int | None:
-        ''' use port 830 for junos - netconf '''
-        if self.task.device.device_type.golden_image.sw.image_type == "junos" or self.task.device.device_type.golden_image.sw.image_type == "junossr":
+        for port in ports:
             try:
-                port = 830
                 self._is_port_open(port)
             except Exception:
                 pass
             else:
                 return port
-        else:
-            for port in ports:
-                try:
-                    self._is_port_open(port)
-                except Exception:
-                    pass
-                else:
-                    return port
 
     def _get_cli(self, **kwargs) -> None | IOSXEDriver:
         def fallback_to_telnet(cli, **kwargs) -> None | IOSXEDriver:
@@ -324,7 +308,7 @@ class TaskExecutor(TaskLoggerMixIn):
             return pid
         else:
             msg = "Cannot get device PID"
-            Self.error(msg)
+            self.error(msg)
             self.skip_task(msg, reason=TaskFailReasonChoices.FAIL_CONFIG)
         return ""
 
@@ -383,54 +367,17 @@ class TaskExecutor(TaskLoggerMixIn):
 
     def _validate_device(self) -> None:
         self.info("Device valiation...")
-        if self.task.device.device_type.golden_image.sw.image_type == "junos" or self.task.device.device_type.golden_image.sw.image_type == "junossr":
-            ''' replacement for _validate_pid_sn _validate_image '''
-            self.debug(f"Running JUNOS/JUNOS-SR device validation")
-            dev = JDevice(host=str(self.task.device.primary_ip.address.ip),user=DEVICE_USERNAME,passwd=DEVICE_PASSWORD)   
-            dev.open()
-            if dev.facts['serialnumber'].lower() != self.task.device.serial.lower() or dev.facts['model'].lower() != self.task.device.device_type.model.lower():
-                msg = "Device PID/SN does not match with NetBox data"
-                self.error(msg)
-                self.skip_task(msg, reason=TaskFailReasonChoices.FAIL_CONFIG)
-            self.info(f"Device '{dev.facts['model']}/{dev.facts['serialnumber']} matches with NetBox data")
 
-            if not self.task.device.device_type.golden_image.sw.image_exists:
-                self.debug(f"SoftwareImage was created without file, no need to validate against device files")
-                return      
+        commands = ["show version", "dir /all"]
+        outputs = self._send_commands(commands)
+        self.debug("----------vv Outputs vv----------")
+        for output in outputs:
+            self.debug("\n" + output.result)
+        self.debug("----------^^ Outputs ^^----------")
+        self._validate_pid_sn(outputs[0])
+        self._validate_image_file(outputs[1])
 
-            ''' regex for <path> <blocks> <used> <avail> <capacity> <mounted> '''     
-            re_df = re.compile("([a-zA-Z0-9\/]+)[\s]+([0-9]+)[\s]+([0-9]+)[\s]+([0-9]+)[\s]+([0-9\%]+)[\s]+(.*)")
-            with StartShell(dev) as ss:
-                (return_code,output) = ss.run('df /var/tmp')
-                for line in output.splitlines():
-                    t = re_df.match(line)
-                    if t:
-                        self.total_free = int(t.group(4)) * 1024
-
-                (return_code,output) = ss.run('ls /var/tmp')
-        
-                self.file_system = "/var/tmp"
-                self.target_image = self.task.device.device_type.golden_image.sw.filename
-                target_path = self.task.device.device_type.golden_image.sw.image.path
-                self.image_on_device = list(filter(lambda x: x == self.task.device.device_type.golden_image.sw.filename, output.splitlines()))
-
-            self.debug(f"Filesystem: {self.file_system}")
-            self.debug(f"Target Image: {self.target_image}")
-            self.debug(f"Target Path: {target_path}")
-            self.debug(f"Target Image on box: {self.image_on_device}")
-
-            self.info("Device has been validated")
-        else:
-            commands = ["show version", "dir /all"]
-            outputs = self._send_commands(commands)
-            self.debug("----------vv Outputs vv----------")
-            for output in outputs:
-                self.debug("\n" + output.result)
-            self.debug("----------^^ Outputs ^^----------")
-            self._validate_pid_sn(outputs[0])
-            self._validate_image_file(outputs[1])
-
-            self.info("Device has been validated")
+        self.info("Device has been validated")
 
     def _initial_check(self) -> None:
         self.info("Initial checking...")
@@ -497,114 +444,62 @@ class TaskExecutor(TaskLoggerMixIn):
             self.skip_task(msg, TaskFailReasonChoices.FAIL_UPLOAD)
 
     def _check_md5(self, filename: str, expected_md5: str) -> None:
-        if self.task.device.device_type.golden_image.sw.image_type == "junos" or self.task.device.device_type.golden_image.sw.image_type == "junossr":
-            dev = JDevice(host=str(self.task.device.primary_ip.address.ip),user=DEVICE_USERNAME,passwd=DEVICE_PASSWORD)
-            dev.open()
-            filesys = FS(dev)
-            dev_checksum = filesys.checksum(filename,'md5')
-            if str(dev_checksum) == expected_md5:
-                self.info("MD5 was verified")
-            else:
+        outputs = self._send_commands(
+            [f"verify /md5 {filename} {expected_md5}"],
+            timeout_ops=1800,
+            timeout_transport=1800,
+        )
 
-                msg = f"Wrong MD5 {dev_checksum}/{expected_md5}"
-                self.error(msg)
-                self.skip_task(msg, TaskFailReasonChoices.FAIL_CHECK)
+        self.debug(f"MD5 verication result:\n{outputs.result[-150:]}")
+        if outputs.failed:
+            self._close_cli()
+            msg = "Can not check MD5"
+            self.error(msg)
+            self.skip_task(msg, TaskFailReasonChoices.FAIL_CHECK)
+
+        if re.search(r"Verified", outputs.result):
+            self.info("MD5 was verified")
         else:
-            outputs = self._send_commands(
-                [f"verify /md5 {filename} {expected_md5}"],
-                timeout_ops=1800,
-                timeout_transport=1800,
-            )
-
-            self.debug(f"MD5 verication result:\n{outputs.result[-150:]}")
-            if outputs.failed:
-                self._close_cli()
-                msg = "Can not check MD5"
-                self.error(msg)
-                self.skip_task(msg, TaskFailReasonChoices.FAIL_CHECK)
-
-            if re.search(r"Verified", outputs.result):
-                self.info("MD5 was verified")
-            else:
-                self._close_cli()
-                msg = "Wrong M5"
-                self.error(msg)
-                self.skip_task(msg, TaskFailReasonChoices.FAIL_CHECK)
-
-    def _scp_progress(self, dev, report):
-        self.debug(report)
+            self._close_cli()
+            msg = "Wrong M5"
+            self.error(msg)
+            self.skip_task(msg, TaskFailReasonChoices.FAIL_CHECK)
 
     def _upload(self) -> None:
         if self.task.device is None:
             return
-        if self.task.device.device_type.golden_image.sw.image_type != "junos" and self.task.device.device_type.golden_image.sw.image_type != "junossr":
-            # cisco 
-            if not self.task.device.device_type.golden_image.sw.image_exists:
-                msg = f"SoftwareImage was created without file, upload is not applicable"
-                self.warning(msg)
-                self.skip_task(msg, TaskFailReasonChoices.FAIL_UPLOAD)
-            if not all([self.target_image, self.file_system, self.total_free]):
-                msg = "Was not able to parse files on device flash."
-                self.warning(msg)
-                self.skip_task(msg, TaskFailReasonChoices.FAIL_UPLOAD)
+        if not self.task.device.device_type.golden_image.sw.image_exists:
+            msg = f"SoftwareImage was created without file, upload is not applicable"
+            self.warning(msg)
+            self.skip_task(msg, TaskFailReasonChoices.FAIL_UPLOAD)
+        if not all([self.target_image, self.file_system, self.total_free]):
+            msg = "Was not able to parse files on device flash."
+            self.warning(msg)
+            self.skip_task(msg, TaskFailReasonChoices.FAIL_UPLOAD)
 
-            if self.image_on_device is not None and len(self.image_on_device) == 0:
-                self.info("No image on the device. Need to transfer")
-                image_size = int(self.task.device.device_type.golden_image.sw.image.size) * 1.1
-                self.debug(f"Free on {self.file_system} - {self.total_free}, Image size (+10%) - {int(image_size)}")
+        if self.image_on_device is not None and len(self.image_on_device) == 0:
+            self.info("No image on the device. Need to transfer")
+            image_size = int(self.task.device.device_type.golden_image.sw.image.size) * 1.1
+            self.debug(f"Free on {self.file_system} - {self.total_free}, Image size (+10%) - {int(image_size)}")
 
-                if int(self.total_free) < int(image_size):
-                    self._close_cli()
-                    msg = f"No enough space on {self.file_system}"
-                    self.error(msg)
-                    self.skip_task(msg, TaskFailReasonChoices.FAIL_UPLOAD)
-                else:
-                    self.debug("Enough space for uploading, contunue proccessing")
-                self._file_upload()
+            if int(self.total_free) < int(image_size):
+                self._close_cli()
+                msg = f"No enough space on {self.file_system}"
+                self.error(msg)
+                self.skip_task(msg, TaskFailReasonChoices.FAIL_UPLOAD)
             else:
-                self.info(f"Image {self.target_image} already exists")
-
-            self.info("MD5 verification...")
-            self._check_md5(
-                filename=f"{self.file_system}/{self.target_image}",
-                expected_md5=self.task.device.device_type.golden_image.sw.md5sum,
-            )
-            self.info("File was uploaded and verified")
-            self._close_cli()
+                self.debug("Enough space for uploading, contunue proccessing")
+            self._file_upload()
         else:
-            if self.image_on_device is not None and len(self.image_on_device) == 0:
-                self.info("No image on the device. Need to transfer")
-                image_size = int(self.task.device.device_type.golden_image.sw.image.size) * 1.1
-                self.debug(f"Free on {self.file_system} - {self.total_free}, Image size (+10%) - {int(image_size)}")
+            self.info(f"Image {self.target_image} already exists")
 
-                if int(self.total_free) < int(image_size):
-                    msg = f"No enough space on {self.file_system}"
-                    self.error(msg)
-                    self.skip_task(msg, TaskFailReasonChoices.FAIL_UPLOAD)
-                else:
-                    self.debug("Enough space for uploading, contunue proccessing")
-                    try:
-                        self.info("Beginning JUNOS upload ...") 
-                        dev = JDevice(host=str(self.task.device.primary_ip.address.ip),user=DEVICE_USERNAME,passwd=DEVICE_PASSWORD)
-                        with SCP(dev, progress=self._scp_progress) as scp:
-                            scp.put(self.task.device.device_type.golden_image.sw.image.path, "/var/tmp/" + self.task.device.device_type.golden_image.sw.filename)
-                            self.info(f"Software successfully uploaded")
-                            self._check_md5(
-                                filename=f"/var/tmp/{self.task.device.device_type.golden_image.sw.filename}",
-                                expected_md5=self.task.device.device_type.golden_image.sw.md5sum,
-                            )
-                        dev.close()
-                    except Exception as inst:
-                        msg = f"Failed to connect / upload to device - " + str(inst)
-                        self.warning(msg)
-                        self.skip_task(msg, TaskFailReasonChoices.FAIL_UPLOAD)
-
-
-            else:
-                self.info(f"Image {self.target_image} already exists")
-
-
-
+        self.info("MD5 verification...")
+        self._check_md5(
+            filename=f"{self.file_system}/{self.target_image}",
+            expected_md5=self.task.device.device_type.golden_image.sw.md5sum,
+        )
+        self.info("File was uploaded and verified")
+        self._close_cli()
 
     def _compare_sw(self, show_version_output: Response, should_match: bool) -> None:
         if self.task.device is None:
@@ -814,4 +709,3 @@ class TaskExecutor(TaskLoggerMixIn):
             self._upgrade()
 
         return True
-

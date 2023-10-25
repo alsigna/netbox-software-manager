@@ -15,7 +15,7 @@ from utilities.forms import (
     TagFilterField,
 )
 
-from .choices import TaskStatusChoices, TaskTransferMethod, TaskTypeChoices
+from .choices import TaskStatusChoices, TaskTransferMethod, TaskTypeChoices, ImageTypeChoices
 from .models import GoldenImage, ScheduledTask, SoftwareImage
 
 PLUGIN_SETTINGS = settings.PLUGINS_CONFIG.get("software_manager", dict())
@@ -23,7 +23,7 @@ CF_NAME_SW_VERSION = PLUGIN_SETTINGS.get("CF_NAME_SW_VERSION", "")
 DEFAULT_TRANSFER_METHOD = PLUGIN_SETTINGS.get("DEFAULT_TRANSFER_METHOD", TaskTransferMethod.METHOD_FTP)
 IMAGE_FOLDER = PLUGIN_SETTINGS.get("IMAGE_FOLDER", "")
 
-IMAGE_FORMATS = ".bin"
+IMAGE_FORMATS = ".bin,.tgz"
 
 
 class ClearableFileInput(forms.ClearableFileInput):
@@ -34,7 +34,7 @@ class SoftwareImageEditForm(NetBoxModelForm):
     image = forms.FileField(
         required=False,
         label="Image",
-        help_text="Image File, with .bin extension",
+        help_text="Image File, with .bin/.tgz extension",
         widget=ClearableFileInput(attrs={"accept": IMAGE_FORMATS}),
     )
     md5sum = forms.CharField(
@@ -42,6 +42,13 @@ class SoftwareImageEditForm(NetBoxModelForm):
         label="MD5 Checksum",
         help_text="Expected MD5 Checksum, ex: 0f58a02f3d3f1e1be8f509d2e5b58fb8",
     )
+
+    supported_devicetypes = DynamicModelMultipleChoiceField(
+        queryset=DeviceType.objects.all(),
+        required=False,
+        label="Supported Devices",
+    )
+
     version = forms.CharField(
         required=True,
         label="Version",
@@ -55,6 +62,8 @@ class SoftwareImageEditForm(NetBoxModelForm):
         model = SoftwareImage
         fields = [
             "image",
+            "image_type",
+            "supported_devicetypes",
             "md5sum",
             "version",
             "tags",
